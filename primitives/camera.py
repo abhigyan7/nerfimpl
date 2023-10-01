@@ -4,19 +4,58 @@ import jax
 import jax.numpy as jnp
 import equinox as eqx
 
-class PinholeCamera(eqx.Module):
-    f: jax.Array
-    d: jax.Array
-    c: jax.Array
+from jax_dataclasses import pytree_dataclass
 
-    def __init__(self, f, d, c=(0.0, 0.0)):
+from jaxlie import SE3
+
+from jaxtyping import Float, Array
+
+@pytree_dataclass
+class Ray:
+    origin: Float[Array, "3"]
+    direction: Float[Array, "3"]
+
+class PinholeCamera(eqx.Module):
+    f: Float
+    w: Float
+    h: Float
+    c: Float[Array, "2"]
+    n: Float
+    extrinsics: SE3
+
+    def __init__(self, f, d, extrinsics, n, c=(0.0, 0.0)):
         self.f = f
-        self.d = d
+        self.h = d[0]
+        self.w = d[1]
+        self.extrinsics = extrinsics
+        self.n = n
         self.c = c
 
-    def get_ray(self, p):
+    def get_ray(self, u: Float, v: Float) -> Ray:
         # should return centers and directions for the specified pixel
-        raise NotImplementedError
+        o = jnp.array([0, 0, 0.0])
+        d = jnp.array([u, v, 1.0])
+
+        o = self.extrinsics.translation() + o
+        d = self.extrinsics @ d
+
+        tn = -(self.n+o[2]) / d[2]
+        on = o + tn * d
+
+        o_prime = jnp.array([
+            -(self.f * on[0])/((self.w/2)*on[2]),
+            -(self.f * on[1])/((self.h/2)*on[2]),
+            1+(2*self.n)/(on[2]),
+        ])
+
+        d_prime = jnp.array([
+            - (self.f / (self.w/2)) * ((d[0]/d[2]) - (on[0]/on[2])),
+            - (self.f / (self.h/2)) * ((d[1]/d[2]) - (on[1]/on[2])),
+            - (2*self.n)/(on[2]),
+        ])
+
+
+        return Ray(o_prime, d_prime)
 
     def get_ray_bundle(self):
         # should return center and directions for all rays coming out of the camera

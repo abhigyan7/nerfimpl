@@ -9,7 +9,6 @@ from equinox.nn import Linear
 
 import jaxtyping
 
-
 class MhallMLP(eqx.Module):
     layers_first_half: jax.Array
     layers_second_half: jax.Array
@@ -45,15 +44,15 @@ class MhallMLP(eqx.Module):
         for layer in self.layers_first_half:
             x = layer(x)
 
-        x = jnp.concatenate([x, xyz], axis=1)
+        x = jnp.concatenate([x, xyz])
 
         for layer in self.layers_second_half:
             x = layer(x)
 
-        density = jax.nn.relu(x[..., 0])
+        density = jax.nn.relu(x[0])
 
-        x = x[..., 1:]
-        x = jnp.concatenate([x, dirs], axis=1)
+        x = x[1:]
+        x = jnp.concatenate([x, dirs])
 
         for layer in self.rgb_head:
             x = layer(x)
@@ -65,4 +64,10 @@ if __name__ == "__main__":
     key = jax.random.PRNGKey(0)
     mlp = MhallMLP(key)
     grad_mlp = jax.grad(mlp)
+    pos = jax.random.normal(key, (60,))
+    dirs = jax.random.normal(key, (24,))
+    vpos = jax.random.normal(key, (11,60))
+    vdirs = jax.random.normal(key, (11,24))
     print(mlp)
+    print(mlp(pos, dirs))
+    print(jax.vmap(mlp, (vpos, vdirs)))
