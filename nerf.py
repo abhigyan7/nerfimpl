@@ -19,11 +19,9 @@ def main():
     location = encoding.positional_encoding(ray.origin, 10)
     nerf = mlp.MhallMLP(nerf_key)
     print(f"{nerf(location, direction)=}")
-    sampler = render.HierarchicalSampler(sampler_key, 3, 10)
-    print(f"{sampler.get_coarse_points()=}")
-    print(f"{sampler.get_coarse_points()=}")
-    print(f"{sampler.get_coarse_points()=}")
-    print(f"{sampler.get_coarse_points()=}")
+    coarse_key, sampler_key = jax.random.split(sampler_key)
+    print(f"{render.sample_t(coarse_key, 64)=}")
+    print(f"{render.sample_t(coarse_key, 4, jnp.array([3,4,5]), jnp.array([0.1, 0.3, 0.5]))=}")
     return
 
 if __name__ == "__main__":
