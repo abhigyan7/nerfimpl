@@ -2,10 +2,10 @@
 
 import jax
 import jax.numpy as jnp
-import flax
-from flax import linen
 
-class Integrator(linen.Module):
+import equinox as eqx
+
+class Integrator(eqx.Module):
 
     def setup(self):
         pass
@@ -13,7 +13,7 @@ class Integrator(linen.Module):
     def __call__(self, points, samples):
         return
 
-class HierarchicalSampler(linen.Module):
+class HierarchicalSampler(eqx.Module):
     def setup(self, near, far, nc, nf):
         self.near = near
         self.far = far
@@ -22,24 +22,23 @@ class HierarchicalSampler(linen.Module):
 
     def get_coarse_points(self):
         # first sample set
-        course_bins = jnp.arange(nc+1)
-        course_bins = course_bins / nc
+        course_bins = jnp.arange(self.nc+1)
+        course_bins = course_bins / self.nc
         self.course_bins = self.near + course_bins * (self.far - self.near)
 
         # TODO sample course_points from above
         self.deltas_course = None
+        course_points = None
         return course_points
 
     def get_fine_points(self, coarse_points, coarse_samples):
         # second sample set
-        course_bins = jnp.arange(nf)
-        course_bins = course_bins / nc
+        course_bins = jnp.arange(self.nf)
+        course_bins = course_bins / self.nc
         self.course_bins = self.near + course_bins * (self.far - self.near)
         # TODO sample course_points from above
-        self.deltas_course = None
-        return course_points
-        return
-
-    def integrate(self, points, samples):
+        self.deltas_fine = None
+        self.fine_points = NotImplemented
+        return self.fine_points
         return
 

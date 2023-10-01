@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 
-class PinholeCamera():
+import jax
+import jax.numpy as jnp
+import equinox as eqx
 
-    def __init__(self, f, w, h, cx = 0.0, cy = 0.0):
-        if isinstance(f, tuple) or isinstance(f, list):
-            self.f = (f[0], f[1])
-        else:
-            self.f = f
-        self.w = w
-        self.h = h
-        return
+class PinholeCamera(eqx.Module):
+    f: jax.Array
+    d: jax.Array
+    c: jax.Array
 
-    def get_ray(self, px, py):
+    def __init__(self, f, d, c=(0.0, 0.0)):
+        self.f = f
+        self.d = d
+        self.c = c
+
+    def get_ray(self, p):
         # should return centers and directions for the specified pixel
         raise NotImplementedError
 

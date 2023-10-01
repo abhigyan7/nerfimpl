@@ -1,53 +1,68 @@
 #!/usr/bin/env python3
 
-import abc
-
-from flax import linen
 import jax
 import jax.numpy as jnp
 
-class SceneRepresentation(abc.ABC):
+from jax.nn import relu, sigmoid
+import equinox as eqx
+from equinox.nn import Linear
 
-    def __init__(self):
-        pass
+import jaxtyping
 
-    def forward(self):
-        pass
 
-class MhallMLP(linen.Module):
+class MhallMLP(eqx.Module):
+    layers_first_half: jax.Array
+    layers_second_half: jax.Array
+    rgb_head: jax.Array
 
-    def setup(self):
-        self.dense1 = linen.Dense(256)
-        self.dense2 = linen.Dense(256)
-        self.dense3 = linen.Dense(256)
-        self.dense4 = linen.Dense(256)
-        self.dense5 = linen.Dense(256)
-        self.dense6 = linen.Dense(256)
-        self.dense7 = linen.Dense(256)
-        self.dense8 = linen.Dense(257)
-        self.dense9 = linen.Dense(128)
-        self.dense10 = linen.Dense(3)
+    def __init__(self, key : jaxtyping.PRNGKeyArray, pos_dim=60, dir_dim=24):
+        keys = jax.random.split(key, 10)
+        self.layers_first_half : jax.Array = [
+            Linear(pos_dim, 256, key=keys[0]), relu,
+            Linear(256, 256, key=keys[1]), relu,
+            Linear(256, 256, key=keys[2]), relu,
+            Linear(256, 256, key=keys[3]), relu,
+        ]
 
-    def __call__(self, x, d):
+        self.layers_second_half = [
+            Linear(256+pos_dim, 256, key=keys[4]), relu,
+            Linear(256, 256, key=keys[5]), relu,
+            Linear(256, 256, key=keys[6]), relu,
+            Linear(256, 256, key=keys[7]), relu,
+            Linear(256, 256+1, key=keys[8]),
+        ]
 
-        x = linen.relu(self.dense1(x))
-        x = linen.relu(self.dense2(x))
-        x = linen.relu(self.dense3(x))
-        x = linen.relu(self.dense4(x))
+        self.rgb_head = [
+            Linear(256+dir_dim, 128, key=keys[9]), relu,
+            Linear(128, 3, key=keys[10]), sigmoid,
+        ]
 
-        x = jnp.concatenate([x, d], axis=1)
-        x = linen.relu(self.dense5(x))
-        x = linen.relu(self.dense6(x))
-        x = linen.relu(self.dense7(x))
-        x = linen.relu(self.dense8(x))
 
-        density = x[..., 0]
+    def __call__(self, xyz: jax.Array, dirs: jax.Array) -> jax.Array:
 
-        x = linen.relu(self.dense9(x[..., 1:]))
-        rgb = linen.sigmoid(self.dense10(x))
+        x = xyz
+
+        for layer in self.layers_first_half:
+            x = layer(x)
+
+        x = jnp.concatenate([x, xyz], axis=1)
+
+        for layer in self.layers_second_half:
+            x = layer(x)
+
+        density = jax.nn.relu(x[..., 0])
+
+        x = x[..., 1:]
+        x = jnp.concatenate([x, dirs], axis=1)
+
+        for layer in self.rgb_head:
+            x = layer(x)
+        rgb = x
 
         return density, rgb
 
 if __name__ == "__main__":
-    mlp = MhallMLP()
-    print(mlp.tabulate(jax.random.key(0), jnp.ones((10, 3)), jnp.ones((10, 2))))
+    key = jax.random.PRNGKey(0)
+    mlp = MhallMLP(key)
+    grad_mlp = jax.grad(mlp)
+    print(mlp)
