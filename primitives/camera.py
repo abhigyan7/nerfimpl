@@ -15,6 +15,9 @@ class Ray:
     origin: Float[Array, "3"]
     direction: Float[Array, "3"]
 
+    def at(self, t):
+        return self.origin + self.direction * t
+
 class PinholeCamera(eqx.Module):
     f: Float
     w: Float
