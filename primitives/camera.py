@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import jax
 import jax.numpy as jnp
 import equinox as eqx
 
@@ -61,7 +60,4 @@ class PinholeCamera(eqx.Module):
         return Ray(o_prime, d_prime)
 
     def get_ray_bundle(self):
-        # should return center and directions for all rays coming out of the camera
-        pixels = None # get all pixels
-        # can do this? return jax.vmap(self.get_ray, pixels)
         raise NotImplementedError

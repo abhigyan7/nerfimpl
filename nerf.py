@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from primitives import camera, encoding, mlp, render
+from primitives import camera, mlp, render
 import jax
 import jax.numpy as jnp
 

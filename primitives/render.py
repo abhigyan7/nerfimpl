@@ -3,7 +3,6 @@
 import jax
 import jax.numpy as jnp
 
-from primitives.camera import Ray
 from primitives.encoding import positional_encoding
 
 def cart2sph(xyz):
@@ -52,11 +51,11 @@ def render_single_ray(ray, ts, nerf):
 def hierarchical_render_single_ray(key, ray, nerf):
     coarse_key, fine_key = jax.random.split(key, 2)
     coarse_ts = sample_coarse(coarse_key, 64)
-    coarse_rgb, coarse_densities, coarse_rgbs = render_single_ray(ray, coarse_ts, nerf)
+    coarse_rgb, coarse_densities, _ = render_single_ray(ray, coarse_ts, nerf)
 
     fine_ts = sample_fine(fine_key, 128, coarse_densities, coarse_ts)
     fine_ts = jnp.concatenate((coarse_ts, fine_ts))
-    fine_rgb, fine_densities, fine_rgbs = render_single_ray(ray, fine_ts, nerf)
+    fine_rgb, _, _ = render_single_ray(ray, fine_ts, nerf)
 
     return coarse_rgb, fine_rgb
 
