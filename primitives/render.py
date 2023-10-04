@@ -4,6 +4,7 @@ import jax
 import jax.numpy as jnp
 
 from primitives.camera import Ray
+from primitives.encoding import positional_encoding
 
 def cart2sph(xyz):
     xy = xyz[0]**2 + xyz[1]**2
@@ -37,8 +38,27 @@ def calc_w(density, delta):
     ret = T * ret
     return ret
 
-def render_one_ray(ray: Ray):
-    pass
+def render_single_ray(ray, ts, nerf):
+    xyzs = jax.vmap(ray.at)(ts)
+    location = jax.vmap(lambda x: positional_encoding(x,10))(xyzs)
+    direction = jnp.tile(positional_encoding(ray.direction, 4), (location.shape[0], 1))
+    nerf_densities, nerf_rgbs = jax.vmap(nerf)(location, direction)
+    T = calc_T(nerf_densities[1:], jnp.diff(ts))
+    w = calc_w(nerf_densities[1:], jnp.diff(ts))
+    alpha = T * w
+    rgb = (alpha @ nerf_rgbs[1:])
+    return rgb, nerf_densities, nerf_rgbs
+
+def hierarchical_render_single_ray(key, ray, nerf):
+    coarse_key, fine_key = jax.random.split(key, 2)
+    coarse_ts = sample_coarse(coarse_key, 64)
+    coarse_rgb, coarse_densities, coarse_rgbs = render_single_ray(ray, coarse_ts, nerf)
+
+    fine_ts = sample_fine(fine_key, 128, coarse_densities, coarse_ts)
+    fine_ts = jnp.concatenate((coarse_ts, fine_ts))
+    fine_rgb, fine_densities, fine_rgbs = render_single_ray(ray, fine_ts, nerf)
+
+    return coarse_rgb, fine_rgb
 
 if __name__ == "__main__":
     test_density = jnp.array([0.4, 0.9, 0.5, 0.1])
