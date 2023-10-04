@@ -3,6 +3,15 @@
 import jax
 import jax.numpy as jnp
 
+from primitives.camera import Ray
+
+def cart2sph(xyz):
+    xy = xyz[0]**2 + xyz[1]**2
+    theta = jnp.sqrt(xy + xyz[2]**2)
+    si = jnp.arctan2(jnp.sqrt(xy), xyz[2]) # for elevation angle defined from Z-axis down
+    r = jnp.arctan2(xyz[1], xyz[0])
+    return jnp.array([theta, si, r])
+
 def sample_coarse(key, n_points):
     points = jnp.arange(n_points) + jax.random.uniform(key, (n_points,))
     points = points / n_points
@@ -27,6 +36,9 @@ def calc_w(density, delta):
     ret = 1.0 - jnp.exp(-density * delta)
     ret = T * ret
     return ret
+
+def render_one_ray(ray: Ray):
+    pass
 
 if __name__ == "__main__":
     test_density = jnp.array([0.4, 0.9, 0.5, 0.1])
