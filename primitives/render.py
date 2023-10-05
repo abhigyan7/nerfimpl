@@ -3,6 +3,8 @@
 import jax
 import jax.numpy as jnp
 
+import equinox as eqx
+
 from primitives.encoding import positional_encoding
 
 def cart2sph(xyz):
@@ -38,7 +40,7 @@ def calc_w(density, delta):
     return ret
 
 def render_single_ray(ray, ts, nerf):
-    xyzs = jax.vmap(ray.at)(ts)
+    xyzs = jax.vmap(ray)(ts)
     location = jax.vmap(lambda x: positional_encoding(x,10))(xyzs)
     direction = jnp.tile(positional_encoding(ray.direction, 4), (location.shape[0], 1))
     nerf_densities, nerf_rgbs = jax.vmap(nerf)(location, direction)

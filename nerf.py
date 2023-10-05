@@ -3,7 +3,7 @@
 from primitives import camera, mlp, render
 import jax
 import jax.numpy as jnp
-
+import equinox as eqx
 import jaxlie
 
 def main():
@@ -18,8 +18,17 @@ def main():
     nerf = mlp.MhallMLP(nerf_key)
 
     coarse_rgb, fine_rgb = render.hierarchical_render_single_ray(sampler_key, ray, nerf)
-    print(f"{coarse_rgb=}")
-    print(f"{fine_rgb=}")
+
+    rays = [cam.get_ray(1, i) for i in range(10)]
+    rays = jax.vmap(cam.get_ray)(jnp.arange(10), jnp.arange(10,20))
+    sampler_keys = jax.random.split(sampler_key, 10)
+    coarse_rgbs, fine_rgbs = eqx.filter_vmap(
+        render.hierarchical_render_single_ray,
+        in_axes=(0, eqx.if_array(0), None)
+    ) (sampler_keys, rays, nerf)
+
+    print(f"{coarse_rgbs=}")
+    print(f"{fine_rgbs=}")
 
     return
 

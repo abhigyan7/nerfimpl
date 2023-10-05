@@ -3,19 +3,23 @@
 import jax.numpy as jnp
 import equinox as eqx
 
-from jax_dataclasses import pytree_dataclass
-
 from jaxlie import SE3
 
 from jaxtyping import Float, Array
 
-@pytree_dataclass
-class Ray:
+class Ray(eqx.Module):
     origin: Float[Array, "3"]
     direction: Float[Array, "3"]
 
-    def at(self, t):
+    def __call__(self, t):
         return self.origin + self.direction * t
+
+class RayBundle(eqx.Module):
+    origins: Float[Array, "N 3"]
+    directions: Float[Array, "N 3"]
+
+    def __call__(self, t):
+        return self.origins + self.directions * t
 
 class PinholeCamera(eqx.Module):
     f: Float
