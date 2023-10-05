@@ -14,26 +14,19 @@ class Ray(eqx.Module):
     def __call__(self, t):
         return self.origin + self.direction * t
 
-class RayBundle(eqx.Module):
-    origins: Float[Array, "N 3"]
-    directions: Float[Array, "N 3"]
-
-    def __call__(self, t):
-        return self.origins + self.directions * t
-
 class PinholeCamera(eqx.Module):
     f: Float
     w: Float
     h: Float
     c: Float[Array, "2"]
     n: Float
-    extrinsics: SE3
+    pose: SE3
 
-    def __init__(self, f, d, extrinsics, n, c=(0.0, 0.0)):
+    def __init__(self, f, h, w, pose, n, c=(0.0, 0.0)):
         self.f = f
-        self.h = d[0]
-        self.w = d[1]
-        self.extrinsics = extrinsics
+        self.h = h
+        self.w = w
+        self.pose = pose
         self.n = n
         self.c = c
 
@@ -42,8 +35,8 @@ class PinholeCamera(eqx.Module):
         o = jnp.array([0, 0, 0.0])
         d = jnp.array([u, v, 1.0])
 
-        o = self.extrinsics.translation() + o
-        d = self.extrinsics @ d
+        o = self.pose.translation() + o
+        d = self.pose @ d
 
         tn = -(self.n+o[2]) / d[2]
         on = o + tn * d
@@ -60,8 +53,5 @@ class PinholeCamera(eqx.Module):
             - (2*self.n)/(on[2]),
         ])
 
-
         return Ray(o_prime, d_prime)
 
-    def get_ray_bundle(self):
-        raise NotImplementedError
