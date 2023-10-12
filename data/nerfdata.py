@@ -68,19 +68,14 @@ class NerfDataloader:
         W, H = 800, 800
         us = jax.random.choice(key_u, W, (self.batch_size,))
         vs = jax.random.choice(key_v, H, (self.batch_size,))
-        # rgb_ground_truths = jax.vmap(self.dataset.train_images.__getitem__)(batch_idx)
+
         rgb_ground_truths = self.dataset.train_images[batch_idx]
-        breakpoint()
-        poses = jax.tree_map(lambda x: self.dataset.train_poses[x], batch_idx)
-        poses = self.dataset.train_poses[batch_idx]
-        # poses = eqx.filter_vmap(lambda x: jnp.take(self.dataset.train_poses, x))(batch_idx)
-        #poses = [self.dataset.train_poses[i] for i in batch_idx]
+        rotations = self.dataset.rotations[batch_idx]
+        translations = self.dataset.translations[batch_idx]
+        rotations_SO3 = jax.vmap(SO3.from_matrix)(rotations)
+        poses = jax.vmap(SE3.from_rotation_and_translation)(rotations_SO3, translations)
         rgb_ground_truths = jax.vmap(lambda x, u, v: x[u][v])(rgb_ground_truths, us, vs)
 
-        breakpoint()
-        #cameras = [PinholeCamera(100.0, H, W, pose, 1.0) for pose in poses]
-        cameras = eqx.filter_vmap(lambda x: PinholeCamera(100.0, H, W, x, 1.0))(poses)
-        cameras = eqx.filter_vmap(PinholeCamera, in_axes=(None, None, None, 0, None)
-                           )(100.0, H, W, poses, 1.0)
+        cameras = jax.vmap(lambda x: PinholeCamera(100.0, H, W, x, 1.0))(poses)
         rays = jax.vmap(lambda x, u, v: x.get_ray(u,v))(cameras, us, vs)
         return rgb_ground_truths, rays
