@@ -22,6 +22,7 @@ def sample_coarse(key, n_points):
 
 def sample_fine(key, n_points, probs, ts):
     uniform_samples = jax.random.uniform(key, (n_points,))
+    probs = probs + jnp.ones_like(probs) * jnp.finfo(jnp.float32).eps
     p_cdf = jnp.cumsum(probs)
     p_cdf = p_cdf / p_cdf.max()
     return jnp.interp(uniform_samples, p_cdf, ts)
@@ -40,11 +41,14 @@ def calc_w(density, delta):
     ret = T * ret
     return ret
 
-def render_single_ray(ray, ts, nerf):
+def render_single_ray(ray, ts, nerf, key, train=False):
     xyzs = eqx.filter_vmap(ray)(ts)
     locations = jax.vmap(lambda x: positional_encoding(x,10))(xyzs)
     direction = positional_encoding(ray.direction, 4)
     nerf_densities, nerf_rgbs = eqx.filter_vmap(nerf, in_axes=(0, None))(locations, direction)
+    if train:
+        nerf_densities = nerf_densities + jax.random.normal(key, nerf_densities.shape)
+    nerf_densities = jax.nn.relu(nerf_densities)
     T = calc_T(nerf_densities[1:], jnp.diff(ts))
     w = calc_w(nerf_densities[1:], jnp.diff(ts))
     alpha = T * w
@@ -52,14 +56,15 @@ def render_single_ray(ray, ts, nerf):
     return rgb, nerf_densities, nerf_rgbs
 
 @eqx.filter_jit
-def hierarchical_render_single_ray(key, ray, nerf):
+def hierarchical_render_single_ray(key, ray, nerf, train=False):
+    coarse_reg_key, fine_reg_key, key = jax.random.split(key, 3)
     coarse_key, fine_key = jax.random.split(key, 2)
-    coarse_ts = sample_coarse(coarse_key, 64)
-    coarse_rgb, coarse_densities, _ = render_single_ray(ray, coarse_ts, nerf)
+    coarse_ts = sample_coarse(coarse_key, 16)
+    coarse_rgb, coarse_densities, _ = render_single_ray(ray, coarse_ts, nerf, coarse_reg_key, train)
 
-    fine_ts = sample_fine(fine_key, 128, coarse_densities, coarse_ts)
+    fine_ts = sample_fine(fine_key, 32, coarse_densities, coarse_ts)
     fine_ts = jnp.concatenate((coarse_ts, fine_ts))
-    fine_rgb, _, _ = render_single_ray(ray, fine_ts, nerf)
+    fine_rgb, _, _ = render_single_ray(ray, fine_ts, nerf, fine_reg_key, train)
 
     return coarse_rgb, fine_rgb
 

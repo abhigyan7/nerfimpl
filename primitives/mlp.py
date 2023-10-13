@@ -49,7 +49,7 @@ class MhallMLP(eqx.Module):
         for layer in self.layers_second_half:
             x = layer(x)
 
-        density = jax.nn.relu(x[0])
+        density = x[0]
 
         x = x[1:]
         x = jnp.concatenate([x, view_dir])
