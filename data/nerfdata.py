@@ -62,6 +62,9 @@ class NerfDataloader:
     def __len__(self):
         return len(self.dataset)
 
+    def __iter__(self):
+        return self
+
     def __next__(self):
         key_b, key_u, key_v = jax.random.split(self.key, 3)
         batch_idx = jax.random.choice(key_b, len(self.dataset), (self.batch_size,))

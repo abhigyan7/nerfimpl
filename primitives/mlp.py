@@ -37,7 +37,7 @@ class MhallMLP(eqx.Module):
         ]
 
 
-    def __call__(self, xyz: jax.Array, dirs: jax.Array) -> jax.Array:
+    def __call__(self, xyz: jax.Array, view_dir: jax.Array) -> jax.Array:
 
         x = xyz
 
@@ -52,7 +52,7 @@ class MhallMLP(eqx.Module):
         density = jax.nn.relu(x[0])
 
         x = x[1:]
-        x = jnp.concatenate([x, dirs])
+        x = jnp.concatenate([x, view_dir])
 
         for layer in self.rgb_head:
             x = layer(x)

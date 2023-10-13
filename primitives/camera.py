@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 
+from functools import partial
 import jax.numpy as jnp
 import equinox as eqx
+import jax
 
 from jaxlie import SE3
 
