@@ -2,16 +2,35 @@
 
 from primitives import mlp, render
 from data.nerfdata import NerfDataloader, NerfDataset
+from primitives.camera import PinholeCamera
 import jax.numpy as jnp
+from PIL import Image
+import numpy as np
 import equinox as eqx
+import jaxlie
 import optax
+import tqdm
 import jax
 
 from pathlib import Path
 
 dataset_path = "/media/data/lego-20231005T103337Z-001/lego/"
 
-BATCH_SIZE = 128
+BATCH_SIZE = 64
+
+@eqx.filter_jit
+def render_frame(nerf, camera, key):
+    rays = camera.get_rays()
+    keys = jax.random.split(key, rays.origin.shape[0])
+    keys = jax.vmap(lambda x: jax.random.split(x, rays.origin.shape[1]))(keys)
+    coarse_rgbs, fine_rgbs = eqx.filter_vmap(
+        eqx.filter_vmap(
+                render.hierarchical_render_single_ray,
+                in_axes=(0, 0, None, None)),
+        in_axes=(0, 0, None, None)
+    ) (keys, rays, nerf, True)
+
+    return coarse_rgbs
 
 @eqx.filter_jit
 def optimize_one_batch(nerf, rays, rgb_ground_truths, key, optimizer, optimizer_state):
@@ -19,7 +38,7 @@ def optimize_one_batch(nerf, rays, rgb_ground_truths, key, optimizer, optimizer_
     @eqx.filter_value_and_grad
     def loss_fn(nerf, rays, rgb_ground_truths, key):
         keys = jax.random.split(key, rays.origin.shape[0])
-        (coarse_rgbs, fine_rgbs) = eqx.filter_vmap(
+        coarse_rgbs, fine_rgbs = eqx.filter_vmap(
             render.hierarchical_render_single_ray,
             in_axes=(0, 0, None, None)
         ) (keys, rays, nerf, True)
@@ -34,23 +53,51 @@ def optimize_one_batch(nerf, rays, rgb_ground_truths, key, optimizer, optimizer_
     return nerf, optimizer_state, loss
 
 
+def PSNR(ground_truth, pred, max_intensity=1.0):
+    MSE = jnp.mean((ground_truth - pred) ** 2.0)
+    psnr = 20 * jnp.log10(max_intensity) - 10 * jnp.log10(MSE)
+    return psnr
+
 def main():
 
-    key = jax.random.PRNGKey(0)
+    key = jax.random.PRNGKey(7)
     nerf_key, dataloader_key, sampler_key = jax.random.split(key, 3)
 
-    nerf = mlp.MhallMLP(nerf_key)
+    nerf = mlp.BasicNeRF(nerf_key)
 
     nerfdataset = NerfDataset(Path(dataset_path))
     dataloader = NerfDataloader(dataloader_key, nerfdataset, BATCH_SIZE)
 
-    optimizer = optax.adabelief(3e-4)
-    optimizer_state = optimizer.init(eqx.filter(nerf, eqx.is_inexact_array))
+    ground_truth_image = nerfdataset.train_images[0]
+    pose = jaxlie.SO3.from_matrix(nerfdataset.rotations[0])
+    pose = jaxlie.SE3.from_rotation_and_translation(pose, nerfdataset.translations[0])
+    camera = PinholeCamera(100.0, 128, 128, pose, 1.0)
 
-    for step, (rgb_ground_truths, rays) in zip(range(100), dataloader):
+    img = np.uint8(np.array(ground_truth_image)*255.0)
+    image = Image.fromarray(img)
+    image.save(f"runs/gt.png")
+
+    optimizer = optax.adam(5e-6)
+    optimizer_state = optimizer.init(eqx.filter(nerf, eqx.is_array))
+
+    psnr = -1.0
+
+    for step in (pbar := tqdm.trange(1000000)):
+        rgb_ground_truths, rays = next(dataloader)
+
+        if step % 1000 == 0:
+            img = render_frame(nerf, camera, key)
+            image = np.array(img)
+            image = np.uint8(np.clip(image*255.0, 0, 255))
+            image = Image.fromarray(image)
+            image.save(f"runs/output_{step:09}.png")
+            psnr = PSNR(ground_truth_image, img)
+
         key, sampler_key = jax.random.split(sampler_key)
-        nerf, optimizer_state, loss = optimize_one_batch(nerf, rays, rgb_ground_truths, key, optimizer, optimizer_state)
-        print(f"{step=}: {loss.item()=}")
+        nerf, optimizer_state, loss = optimize_one_batch(
+            nerf, rays, rgb_ground_truths, key, optimizer, optimizer_state)
+
+        pbar.set_description(f"Loss={loss.item():.4f}, PSNR={psnr:.4f}")
     return
 
 if __name__ == "__main__":

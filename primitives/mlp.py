@@ -3,11 +3,62 @@
 import jax
 import jax.numpy as jnp
 
-from jax.nn import relu, sigmoid
+from jax.nn import relu
 import equinox as eqx
 from equinox.nn import Linear
 
 import jaxtyping
+
+
+class ImageFuncMLP(eqx.Module):
+    layers: jax.Array
+
+    def __init__(self, key : jaxtyping.PRNGKeyArray, pos_dim=40):
+        keys = jax.random.split(key, 7)
+        self.layers: jax.Array = [
+            Linear(pos_dim, 256, key=keys[0]), relu,
+            Linear(256, 256, key=keys[1]), relu,
+            Linear(256, 256, key=keys[2]), relu,
+            Linear(256, 256, key=keys[3]), relu,
+            Linear(256, 256, key=keys[4]), relu,
+            Linear(256, 256, key=keys[5]), relu,
+            Linear(256, 3, key=keys[6]),
+        ]
+
+    def __call__(self, xyz: jax.Array) -> jax.Array:
+
+        x = xyz
+        for layer in self.layers:
+            x = layer(x)
+
+        return x
+
+
+class BasicNeRF(eqx.Module):
+    layers: jax.Array
+
+    def __init__(self, key : jaxtyping.PRNGKeyArray, pos_dim=60):
+        keys = jax.random.split(key, 5)
+        self.layers: jax.Array = [
+            Linear(pos_dim, 256, key=keys[0]), relu,
+            Linear(256, 256, key=keys[1]), relu,
+            Linear(256, 256, key=keys[2]), relu,
+            Linear(256, 128, key=keys[3]), relu,
+            Linear(128, 4, key=keys[4]),
+        ]
+
+
+    def __call__(self, xyz: jax.Array, _: jax.Array) -> jax.Array:
+
+        x = xyz
+        for layer in self.layers:
+            x = layer(x)
+
+        density = x[0]
+        rgb = x[1:]
+
+        return density, rgb
+
 
 class MhallMLP(eqx.Module):
     layers_first_half: jax.Array
@@ -33,7 +84,7 @@ class MhallMLP(eqx.Module):
 
         self.rgb_head = [
             Linear(256+dir_dim, 128, key=keys[9]), relu,
-            Linear(128, 3, key=keys[10]), sigmoid,
+            Linear(128, 3, key=keys[10]),
         ]
 
 

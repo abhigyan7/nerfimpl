@@ -55,14 +55,18 @@ def render_single_ray(ray, ts, nerf, key, train=False):
     rgb = jnp.dot(alpha, nerf_rgbs[1:])
     return rgb, nerf_densities, nerf_rgbs
 
-@eqx.filter_jit
+#@eqx.filter_jit
 def hierarchical_render_single_ray(key, ray, nerf, train=False):
     coarse_reg_key, fine_reg_key, key = jax.random.split(key, 3)
     coarse_key, fine_key = jax.random.split(key, 2)
-    coarse_ts = sample_coarse(coarse_key, 16)
+    coarse_ts = sample_coarse(coarse_key, 64)
     coarse_rgb, coarse_densities, _ = render_single_ray(ray, coarse_ts, nerf, coarse_reg_key, train)
 
-    fine_ts = sample_fine(fine_key, 32, coarse_densities, coarse_ts)
+    return coarse_rgb, coarse_rgb
+
+    coarse_densities = jax.lax.stop_gradient(coarse_densities)
+
+    fine_ts = sample_fine(fine_key, 128, coarse_densities, coarse_ts)
     fine_ts = jnp.concatenate((coarse_ts, fine_ts))
     fine_rgb, _, _ = render_single_ray(ray, fine_ts, nerf, fine_reg_key, train)
 
@@ -75,3 +79,4 @@ if __name__ == "__main__":
     w = calc_w(test_density, test_deltas)
     t = jnp.array([0.1, 0.2, 0.5, 0.9, 1.1, 1.8])
     delta = jnp.diff(t)
+    print(T, w)

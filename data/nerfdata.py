@@ -28,22 +28,18 @@ class NerfDataset():
         for frame in train_frames["frames"]:
             img_path = scene_path / f"{frame['file_path']}.png"
             image = Image.open(img_path)
-            self.train_images.append(np.asarray(image)[..., :3])
+            image = image.resize((128, 128))
+            image = np.asarray(image, dtype=np.float32)[..., :3]
+            self.train_images.append(image)
 
             transform = np.array(frame['transform_matrix'])
             self.rotations.append(transform[:3, :3])
             self.translations.append(transform[:3, 3].squeeze())
-            t = SE3.from_rotation_and_translation(
-                SO3.from_matrix(transform[:3, :3]),
-                transform[:3, 3].squeeze(),
-            )
-            self.train_poses.append(t)
 
-        self.train_images = jnp.stack(self.train_images, 0)
+        self.train_images = jnp.stack(self.train_images, 0) / 255.0
         self.rotations = jnp.stack(self.rotations, 0)
-        self.translations = jnp.stack(self.translations, 0)
-
         self.rotations_SO3 = jax.vmap(SO3.from_matrix)(self.rotations)
+        self.translations = jnp.stack(self.translations, 0)
         self.train_poses = jax.vmap(SE3.from_rotation_and_translation)(self.rotations_SO3, self.translations)
 
     def __getitem__(self, i):
@@ -66,9 +62,9 @@ class NerfDataloader:
         return self
 
     def __next__(self):
-        key_b, key_u, key_v = jax.random.split(self.key, 3)
+        self.key, key_b, key_u, key_v = jax.random.split(self.key, 4)
         batch_idx = jax.random.choice(key_b, len(self.dataset), (self.batch_size,))
-        W, H = 800, 800
+        W, H = 128, 128
         us = jax.random.choice(key_u, W, (self.batch_size,))
         vs = jax.random.choice(key_v, H, (self.batch_size,))
 
@@ -77,7 +73,7 @@ class NerfDataloader:
         translations = self.dataset.translations[batch_idx]
         rotations_SO3 = jax.vmap(SO3.from_matrix)(rotations)
         poses = jax.vmap(SE3.from_rotation_and_translation)(rotations_SO3, translations)
-        rgb_ground_truths = jax.vmap(lambda x, u, v: x[u][v])(rgb_ground_truths, us, vs)
+        rgb_ground_truths = jax.vmap(lambda x, u, v: x[v][u])(rgb_ground_truths, us, vs)
 
         cameras = jax.vmap(lambda x: PinholeCamera(100.0, H, W, x, 1.0))(poses)
         rays = jax.vmap(lambda x, u, v: x.get_ray(u,v))(cameras, us, vs)

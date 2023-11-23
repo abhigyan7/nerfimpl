@@ -57,3 +57,11 @@ class PinholeCamera(eqx.Module):
 
         return Ray(o_prime, d_prime)
 
+    def get_rays(self):
+        us = jnp.arange(self.w)
+        vs = jnp.arange(self.h)
+        us, vs = jnp.meshgrid(us, vs)
+        mapped = eqx.filter_vmap(
+            eqx.filter_vmap(self.get_ray, in_axes=(0, 0)),
+            in_axes=(0, 0))
+        return mapped(us, vs)
