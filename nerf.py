@@ -69,7 +69,7 @@ def main():
 
     nerf = mlp.MhallMLP(nerf_key)
 
-    nerfdataset = NerfDataset(Path(dataset_path), "transforms_train.json", 8.0)
+    nerfdataset = NerfDataset(Path(dataset_path), "transforms_train.json", 32.0)
     dataloader = NerfDataloader(dataloader_key, nerfdataset, BATCH_SIZE)
 
     ground_truth_image = nerfdataset.images[0]
@@ -93,7 +93,7 @@ def main():
             img = render_frame(nerf, camera, key)
 
             image = np.array(img)
-            image = (image - image.min())/(image.max() - image.min()+0.0001)
+            image = (image - image.min())/(image.max() - image.min()+0.000001)
             image = np.uint8(np.clip(image*255.0, 0, 255))
             image = Image.fromarray(image)
             image.save(f"runs/output_{step:09}.png")

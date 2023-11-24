@@ -32,7 +32,7 @@ def process_transforms_json(frames, scene_path, scale=1.0):
         transform = np.array(frame['transform_matrix'])
         rotations.append(transform[:3, :3])
         translations.append(transform[:3, 3].squeeze())
-        break
+
     return images, H, W, f, rotations, translations
 
 class NerfDataset():
