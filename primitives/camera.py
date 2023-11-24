@@ -34,14 +34,14 @@ class PinholeCamera(eqx.Module):
 
     def get_ray(self, u: Float, v: Float) -> Ray:
         # should return centers and directions for the specified pixel
-        o = jnp.array([0, 0, 0.0])
-        d = jnp.array([u, v, 1.0])
+        o = jnp.array([0.0, 0.0, 0.0])
+        d = jnp.array([u-self.w/(2*self.f), v-self.h/(2*self.f), -1.0])
 
-        o = self.pose.translation() + o
-        d = self.pose @ d
+        on = self.pose.translation() + o
+        d = self.pose.rotation().inverse() @ d
 
         tn = -(self.n+o[2]) / d[2]
-        on = o + tn * d
+        on = on + tn * d
 
         o_prime = jnp.array([
             -(self.f * on[0])/((self.w/2)*on[2]),

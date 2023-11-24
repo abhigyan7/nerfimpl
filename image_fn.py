@@ -63,9 +63,9 @@ def main():
 
     nerf = mlp.ImageFuncMLP(nerf_key)
 
-    nerfdataset = NerfDataset(Path(dataset_path))
+    nerfdataset = NerfDataset(Path(dataset_path), "transforms_train.json", 8.0)
 
-    ground_truth_image = nerfdataset.train_images[0]
+    ground_truth_image = nerfdataset.images[0]
 
     img = np.uint8(np.array(ground_truth_image)*255.0)
     image = Image.fromarray(img)
@@ -76,10 +76,9 @@ def main():
     optimizer = optax.adam(5e-5)
     optimizer_state = optimizer.init(eqx.filter(nerf, eqx.is_array))
 
-    pixel_locs = (np.linspace(0, 127, 128), np.linspace(0,127,128))
+    pixel_locs = (np.arange(jax_img.shape[0]), np.arange(jax_img.shape[1]))
     xx, yy = np.meshgrid(*pixel_locs)
     pixel_locs = np.stack([xx, yy]).T
-    breakpoint()
 
     psnr = -1.0
 
@@ -87,7 +86,7 @@ def main():
 
         key, sampler_key = jax.random.split(sampler_key)
 
-        samples = jax.random.choice(key, 128*128, (BATCH_SIZE,), axis=-1)
+        samples = jax.random.choice(key, jax_img.shape[0]*jax_img.shape[1], (BATCH_SIZE,), axis=-1)
         b_pixel_locs = pixel_locs.reshape(-1, 2)[samples]
         b_rgb_gts = jax_img.reshape(-1, 3)[samples]
 

@@ -6,8 +6,6 @@ import equinox as eqx
 
 from primitives.encoding import positional_encoding
 
-from functools import partial
-
 def cart2sph(xyz):
     xy = xyz[0]**2 + xyz[1]**2
     theta = jnp.sqrt(xy + xyz[2]**2)
@@ -38,13 +36,13 @@ def calc_T(density, delta):
 def calc_w(density, delta):
     T = calc_T(density, delta)
     ret = 1.0 - jnp.exp(-density * delta)
-    ret = T * ret
+    # ret = T * ret
     return ret
 
 def render_single_ray(ray, ts, nerf, key, train=False):
     xyzs = eqx.filter_vmap(ray)(ts)
-    locations = jax.vmap(lambda x: positional_encoding(x,10))(xyzs)
-    direction = positional_encoding(ray.direction, 4)
+    locations = jax.vmap(lambda x: positional_encoding(x,10,scale=10.0))(xyzs)
+    direction = positional_encoding(ray.direction, 4, scale=10.0)
     nerf_densities, nerf_rgbs = eqx.filter_vmap(nerf, in_axes=(0, None))(locations, direction)
     if train:
         nerf_densities = nerf_densities + jax.random.normal(key, nerf_densities.shape)
@@ -55,7 +53,6 @@ def render_single_ray(ray, ts, nerf, key, train=False):
     rgb = jnp.dot(alpha, nerf_rgbs[1:])
     return rgb, nerf_densities, nerf_rgbs
 
-#@eqx.filter_jit
 def hierarchical_render_single_ray(key, ray, nerf, train=False):
     coarse_reg_key, fine_reg_key, key = jax.random.split(key, 3)
     coarse_key, fine_key = jax.random.split(key, 2)

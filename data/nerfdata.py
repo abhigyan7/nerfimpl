@@ -10,43 +10,54 @@ from jaxlie import SE3, SO3
 
 from primitives.camera import PinholeCamera
 
+def process_transforms_json(frames, scene_path, scale=1.0):
+
+    images = []
+    H = []
+    W = []
+    rotations = []
+    translations = []
+    train_fov = frames["camera_angle_x"]
+    f = 64.0 / np.tan(train_fov / 2.0)
+    f = f / scale
+    for frame in frames["frames"]:
+        img_path = scene_path / f"{frame['file_path']}.png"
+        image = Image.open(img_path)
+        image = image.resize((int(s/scale) for s in image.size))
+        image = np.asarray(image, dtype=np.float32)[..., :3]
+        images.append(image)
+        H.append(image.shape[0])
+        W.append(image.shape[1])
+
+        transform = np.array(frame['transform_matrix'])
+        rotations.append(transform[:3, :3])
+        translations.append(transform[:3, 3].squeeze())
+        break
+    return images, H, W, f, rotations, translations
+
 class NerfDataset():
 
-    def __init__(self, scene_path):
-        with open(scene_path/"transforms_train.json") as f:
-            train_frames = json.load(f)
-        with open(scene_path/"transforms_test.json") as f:
-            test_frames = json.load(f)
-        with open(scene_path/"transforms_val.json") as f:
-            validation_frames = json.load(f)
+    def __init__(self, scene_path, transforms_file, scale=1.0):
+        with open(scene_path/transforms_file) as f:
+            frames = json.load(f)
+            outputs = process_transforms_json(frames, scene_path, scale)
+            self.images, self.H, self.W, self.f, self.rotations, \
+                self.translations = outputs
 
-        self.train_images = []
-        self.train_poses = []
-        self.train_fov = train_frames["camera_angle_x"]
-        self.rotations = []
-        self.translations = []
-        for frame in train_frames["frames"]:
-            img_path = scene_path / f"{frame['file_path']}.png"
-            image = Image.open(img_path)
-            image = image.resize((128, 128))
-            image = np.asarray(image, dtype=np.float32)[..., :3]
-            self.train_images.append(image)
-
-            transform = np.array(frame['transform_matrix'])
-            self.rotations.append(transform[:3, :3])
-            self.translations.append(transform[:3, 3].squeeze())
-
-        self.train_images = jnp.stack(self.train_images, 0) / 255.0
+        self.images = jnp.stack(self.images, 0) / 255.0
         self.rotations = jnp.stack(self.rotations, 0)
         self.rotations_SO3 = jax.vmap(SO3.from_matrix)(self.rotations)
         self.translations = jnp.stack(self.translations, 0)
-        self.train_poses = jax.vmap(SE3.from_rotation_and_translation)(self.rotations_SO3, self.translations)
+        self.poses = jax.vmap(SE3.from_rotation_and_translation
+                              )(self.rotations_SO3, self.translations)
+        self.H = np.array(self.H)
+        self.W = np.array(self.W)
 
     def __getitem__(self, i):
-        return self.train_images[i], self.train_poses[i]
+        return self.images[i], self.poses[i]
 
     def __len__(self):
-        return len(self.train_images)
+        return len(self.images)
 
 
 class NerfDataloader:
@@ -54,6 +65,8 @@ class NerfDataloader:
         self.dataset = dataset
         self.batch_size = batch_size
         self.key = key
+        self.W = dataset.W
+        self.H = dataset.H
 
     def __len__(self):
         return len(self.dataset)
@@ -64,17 +77,17 @@ class NerfDataloader:
     def __next__(self):
         self.key, key_b, key_u, key_v = jax.random.split(self.key, 4)
         batch_idx = jax.random.choice(key_b, len(self.dataset), (self.batch_size,))
-        W, H = 128, 128
-        us = jax.random.choice(key_u, W, (self.batch_size,))
-        vs = jax.random.choice(key_v, H, (self.batch_size,))
+        us = jax.random.choice(key_u, self.W[batch_idx], (self.batch_size,))
+        vs = jax.random.choice(key_v, self.H[batch_idx], (self.batch_size,))
 
-        rgb_ground_truths = self.dataset.train_images[batch_idx]
+        rgb_ground_truths = self.dataset.images[batch_idx]
         rotations = self.dataset.rotations[batch_idx]
         translations = self.dataset.translations[batch_idx]
         rotations_SO3 = jax.vmap(SO3.from_matrix)(rotations)
         poses = jax.vmap(SE3.from_rotation_and_translation)(rotations_SO3, translations)
         rgb_ground_truths = jax.vmap(lambda x, u, v: x[v][u])(rgb_ground_truths, us, vs)
 
-        cameras = jax.vmap(lambda x: PinholeCamera(100.0, H, W, x, 1.0))(poses)
+        cameras = jax.vmap(lambda x,h,w: PinholeCamera(self.dataset.f, h, w, x, 1.0)
+                           )(poses, self.H[batch_idx], self.W[batch_idx])
         rays = jax.vmap(lambda x, u, v: x.get_ray(u,v))(cameras, us, vs)
         return rgb_ground_truths, rays
