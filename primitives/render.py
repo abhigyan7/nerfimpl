@@ -25,7 +25,7 @@ def sample_fine(key, n_points, probs, ts):
     p_cdf = p_cdf / p_cdf.max()
     return jnp.interp(uniform_samples, p_cdf, ts)
 
-def calc_T(density, delta):
+def calc_transmittance(density, delta):
     ret = density * delta
     ret = jnp.cumsum(ret)
     ret = jnp.exp(-ret)
@@ -33,11 +33,16 @@ def calc_T(density, delta):
     ret = ret.at[0].set(0)
     return ret
 
+def calc_alpha(density, delta):
+    return 1.0 - jnp.exp(-density * delta)
+
 def calc_w(density, delta):
-    T = calc_T(density, delta)
-    ret = 1.0 - jnp.exp(-density * delta)
-    # ret = T * ret
-    return ret
+    alpha = calc_alpha(density, delta)
+    T = calc_transmittance(density, delta)
+    return T * alpha
+
+def dists(ts):
+    return jnp.diff(ts, append=1e10)
 
 def render_single_ray(ray, ts, nerf, key, train=False):
     xyzs = eqx.filter_vmap(ray)(ts)
@@ -47,22 +52,23 @@ def render_single_ray(ray, ts, nerf, key, train=False):
     if train:
         nerf_densities = nerf_densities + jax.random.normal(key, nerf_densities.shape)
     nerf_densities = jax.nn.relu(nerf_densities)
-    T = calc_T(nerf_densities[1:], jnp.diff(ts))
-    w = calc_w(nerf_densities[1:], jnp.diff(ts))
-    alpha = T * w
-    rgb = jnp.dot(alpha, nerf_rgbs[1:])
+    nerf_rgbs = jax.nn.sigmoid(nerf_rgbs)
+    deltas = dists(ts)
+    w = calc_w(nerf_densities, deltas)
+    rgb = jnp.dot(w, nerf_rgbs)
     return rgb, nerf_densities, nerf_rgbs
 
 def hierarchical_render_single_ray(key, ray, nerf, train=False):
     coarse_reg_key, fine_reg_key, key = jax.random.split(key, 3)
     coarse_key, fine_key = jax.random.split(key, 2)
-    coarse_ts = sample_coarse(coarse_key, 64)
+    coarse_ts = sample_coarse(coarse_key, 32)
     coarse_rgb, coarse_densities, _ = render_single_ray(ray, coarse_ts, nerf, coarse_reg_key, train)
 
     return coarse_rgb, coarse_rgb
 
     coarse_densities = jax.lax.stop_gradient(coarse_densities)
 
+    # TODO this isnt correct (see mhall p8 (Normalizing these ...))
     fine_ts = sample_fine(fine_key, 128, coarse_densities, coarse_ts)
     fine_ts = jnp.concatenate((coarse_ts, fine_ts))
     fine_rgb, _, _ = render_single_ray(ray, fine_ts, nerf, fine_reg_key, train)
@@ -70,10 +76,13 @@ def hierarchical_render_single_ray(key, ray, nerf, train=False):
     return coarse_rgb, fine_rgb
 
 if __name__ == "__main__":
+    sample_coarse(jax.random.PRNGKey(0), 16)
     test_density = jnp.array([0.4, 0.9, 0.5, 0.1])
     test_deltas  = jnp.array([1.0, 1.0, 1.0, 1.0])
-    T = calc_T(test_density, test_deltas)
+    T = calc_transmittance(test_density, test_deltas)
     w = calc_w(test_density, test_deltas)
     t = jnp.array([0.1, 0.2, 0.5, 0.9, 1.1, 1.8])
     delta = jnp.diff(t)
     print(T, w)
+    print(delta)
+    print(dists(t))

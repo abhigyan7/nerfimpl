@@ -16,7 +16,7 @@ from pathlib import Path
 
 dataset_path = "/media/data/lego-20231005T103337Z-001/lego/"
 
-BATCH_SIZE = 32
+BATCH_SIZE = 4096
 
 @eqx.filter_jit
 def render_line(nerf, rays, key):
@@ -69,19 +69,25 @@ def main():
 
     nerf = mlp.MhallMLP(nerf_key)
 
-    nerfdataset = NerfDataset(Path(dataset_path), "transforms_train.json", 32.0)
+    nerfdataset = NerfDataset(Path(dataset_path), "transforms_train.json", 8.0)
+    nerfdataset_test = NerfDataset(Path(dataset_path), "transforms_test.json", 8.0)
     dataloader = NerfDataloader(dataloader_key, nerfdataset, BATCH_SIZE)
 
-    ground_truth_image = nerfdataset.images[0]
-    pose = jaxlie.SO3.from_matrix(nerfdataset.rotations[0])
-    pose = jaxlie.SE3.from_rotation_and_translation(pose, nerfdataset.translations[0])
-    camera = PinholeCamera(100.0, nerfdataset.H[0], nerfdataset.W[0], pose, 1.0)
+    gt_idx = 23
+    ground_truth_image = nerfdataset_test.images[gt_idx]
+    pose = jaxlie.SO3.from_matrix(nerfdataset_test.rotations[gt_idx])
+    pose = jaxlie.SE3.from_rotation_and_translation(pose, nerfdataset_test.translations[gt_idx])
+    camera = PinholeCamera(
+        nerfdataset_test.f[gt_idx],
+        nerfdataset_test.H[gt_idx],
+        nerfdataset_test.W[gt_idx],
+        pose, 0.1)
 
     img = np.uint8(np.array(ground_truth_image)*255.0)
     image = Image.fromarray(img)
     image.save(f"runs/gt.png")
 
-    optimizer = optax.adam(5e-5)
+    optimizer = optax.adam(5e-3)
     optimizer_state = optimizer.init(eqx.filter(nerf, eqx.is_array))
 
     psnr = -1.0
@@ -93,7 +99,6 @@ def main():
             img = render_frame(nerf, camera, key)
 
             image = np.array(img)
-            image = (image - image.min())/(image.max() - image.min()+0.000001)
             image = np.uint8(np.clip(image*255.0, 0, 255))
             image = Image.fromarray(image)
             image.save(f"runs/output_{step:09}.png")

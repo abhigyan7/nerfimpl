@@ -35,27 +35,29 @@ class PinholeCamera(eqx.Module):
     def get_ray(self, u: Float, v: Float) -> Ray:
         # should return centers and directions for the specified pixel
         o = jnp.array([0.0, 0.0, 0.0])
-        d = jnp.array([u-self.w/(2*self.f), v-self.h/(2*self.f), -1.0])
+        d = jnp.array([(u-self.w/2.0)/self.f, -(v-self.h/2.0)/self.f, -1.0])
 
-        on = self.pose.translation() + o
-        d = self.pose.rotation().inverse() @ d
+        d = self.pose.rotation() @ d
+        o = self.pose.translation() + o
 
-        tn = -(self.n+o[2]) / d[2]
-        on = on + tn * d
+        #tn = -(self.n+o[2]) / d[2]
+        #o = o + tn * d
 
-        o_prime = jnp.array([
-            -(self.f * on[0])/((self.w/2)*on[2]),
-            -(self.f * on[1])/((self.h/2)*on[2]),
-            1+(2*self.n)/(on[2]),
+        o = jnp.array([
+            -(self.f * o[0])/((self.w/2)*o[2]),
+            -(self.f * o[1])/((self.h/2)*o[2]),
+            1.0+(2.0*self.n)/(o[2]),
         ])
 
-        d_prime = jnp.array([
-            - (self.f / (self.w/2)) * ((d[0]/d[2]) - (on[0]/on[2])),
-            - (self.f / (self.h/2)) * ((d[1]/d[2]) - (on[1]/on[2])),
-            - (2*self.n)/(on[2]),
+        d = jnp.array([
+            - (self.f / (self.w/2)) * ((d[0]/d[2]) - (o[0]/o[2])),
+            - (self.f / (self.h/2)) * ((d[1]/d[2]) - (o[1]/o[2])),
+            - (2.0*self.n)/(o[2]),
         ])
 
-        return Ray(o_prime, d_prime)
+        d = d / jnp.linalg.norm(d)
+
+        return Ray(o, d)
 
     def get_rays(self):
         us = jnp.arange(self.w)
