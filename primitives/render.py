@@ -25,10 +25,10 @@ def sample_fine(key, n_points, probs, ts):
     p_cdf = p_cdf / p_cdf.max()
     return jnp.interp(uniform_samples, p_cdf, ts)
 
-def calc_transmittance(density, delta):
-    ret = density * delta
-    ret = jnp.cumsum(ret)
-    ret = jnp.exp(-ret)
+def calc_transmittance(alphas):
+    ret = 1 - alphas
+    ret = ret + 1e-10
+    ret = jnp.cumprod(ret)
     ret = jnp.roll(ret, 1)
     ret = ret.at[0].set(0)
     return ret
@@ -37,9 +37,9 @@ def calc_alpha(density, delta):
     return 1.0 - jnp.exp(-density * delta)
 
 def calc_w(density, delta):
-    alpha = calc_alpha(density, delta)
-    T = calc_transmittance(density, delta)
-    return T * alpha
+    alphas = calc_alpha(density, delta)
+    T = calc_transmittance(alphas)
+    return T * alphas
 
 def dists(ts):
     return jnp.diff(ts, append=1e10)

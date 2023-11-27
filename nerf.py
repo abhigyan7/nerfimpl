@@ -87,7 +87,7 @@ def main():
     image = Image.fromarray(img)
     image.save(f"runs/gt.png")
 
-    optimizer = optax.adam(5e-3)
+    optimizer = optax.adam(5e-4)
     optimizer_state = optimizer.init(eqx.filter(nerf, eqx.is_array))
 
     psnr = -1.0
