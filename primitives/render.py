@@ -61,10 +61,8 @@ def render_single_ray(ray, ts, nerf, key, train=False):
 def hierarchical_render_single_ray(key, ray, nerf, train=False):
     coarse_reg_key, fine_reg_key, key = jax.random.split(key, 3)
     coarse_key, fine_key = jax.random.split(key, 2)
-    coarse_ts = sample_coarse(coarse_key, 32)
+    coarse_ts = sample_coarse(coarse_key, 64)
     coarse_rgb, coarse_densities, _ = render_single_ray(ray, coarse_ts, nerf, coarse_reg_key, train)
-
-    return coarse_rgb, coarse_rgb
 
     coarse_densities = jax.lax.stop_gradient(coarse_densities)
 
@@ -72,7 +70,8 @@ def hierarchical_render_single_ray(key, ray, nerf, train=False):
 
     fine_ts = sample_fine(fine_key, 128, weights, coarse_ts)
     fine_ts = jnp.concatenate((coarse_ts, fine_ts))
-    # fine_ts = jax.lax.stop_gradient(fine_ts) # TODO remove this?
+    fine_ts = jnp.sort(fine_ts)
+
     fine_rgb, _, _ = render_single_ray(ray, fine_ts, nerf, fine_reg_key, train)
 
     return coarse_rgb, fine_rgb

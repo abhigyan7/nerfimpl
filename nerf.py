@@ -16,7 +16,7 @@ from pathlib import Path
 
 dataset_path = "/media/data/lego-20231005T103337Z-001/lego/"
 
-BATCH_SIZE = 1024
+BATCH_SIZE = 256
 
 @eqx.filter_jit
 def render_line(nerf, rays, key):
@@ -41,13 +41,12 @@ def optimize_one_batch(nerf, rays, rgb_ground_truths, key, optimizer, optimizer_
     @eqx.filter_value_and_grad
     def loss_fn(nerf, rays, rgb_ground_truths, key):
         keys = jax.random.split(key, rays.origin.shape[0])
-        coarse_rgbs, fine_rgbs = eqx.filter_vmap(
+        _, fine_rgbs = eqx.filter_vmap(
             render.hierarchical_render_single_ray,
             in_axes=(0, 0, None, None)
         ) (keys, rays, nerf, True)
-        coarse_loss = jnp.mean((coarse_rgbs - rgb_ground_truths)**2.0)
-        fine_loss = jnp.mean((fine_rgbs - rgb_ground_truths)**2.0)
-        return coarse_loss + fine_loss
+        loss = jnp.mean((fine_rgbs - rgb_ground_truths)**2.0)
+        return loss
 
     loss, grad = loss_fn(nerf, rays, rgb_ground_truths, key)
     updates, optimizer_state = optimizer.update(grad, optimizer_state, nerf)
@@ -68,8 +67,8 @@ def main():
 
     nerf = mlp.MhallMLP(nerf_key)
 
-    nerfdataset = NerfDataset(Path(dataset_path), "transforms_train.json", 8.0)
-    nerfdataset_test = NerfDataset(Path(dataset_path), "transforms_test.json", 8.0)
+    nerfdataset = NerfDataset(Path(dataset_path), "transforms_train.json", 4.0)
+    nerfdataset_test = NerfDataset(Path(dataset_path), "transforms_test.json", 4.0)
     dataloader = NerfDataloader(dataloader_key, nerfdataset, BATCH_SIZE)
 
     gt_idx = 23
@@ -87,7 +86,7 @@ def main():
     image.save(f"runs/gt.png")
 
 
-    optimizer = optax.adam(5e-4)
+    optimizer = optax.adam(5e-5)
     optimizer_state = optimizer.init(eqx.filter(nerf, eqx.is_array))
 
     psnr = -1.0
@@ -95,7 +94,7 @@ def main():
     for step in (pbar := tqdm.trange(1000000)):
         rgb_ground_truths, rays = next(dataloader)
 
-        if step % 50 == 0:
+        if step % 200 == 0:
             img = render_frame(nerf, camera, key)
 
             image = np.array(img)
