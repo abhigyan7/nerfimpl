@@ -16,7 +16,7 @@ from pathlib import Path
 
 dataset_path = "/media/data/lego-20231005T103337Z-001/lego/"
 
-BATCH_SIZE = 4096
+BATCH_SIZE = 1024
 
 @eqx.filter_jit
 def render_line(nerf, rays, key):
@@ -28,7 +28,6 @@ def render_line(nerf, rays, key):
     return fine_rgbs
 
 
-#@eqx.filter_jit
 def render_frame(nerf, camera, key):
     rays = camera.get_rays()
     keys = jax.random.split(key, rays.origin.shape[0])
@@ -81,11 +80,12 @@ def main():
         nerfdataset_test.f[gt_idx],
         nerfdataset_test.H[gt_idx],
         nerfdataset_test.W[gt_idx],
-        pose, 0.1)
+        pose, 0.01)
 
     img = np.uint8(np.array(ground_truth_image)*255.0)
     image = Image.fromarray(img)
     image.save(f"runs/gt.png")
+
 
     optimizer = optax.adam(5e-4)
     optimizer_state = optimizer.init(eqx.filter(nerf, eqx.is_array))
@@ -95,7 +95,7 @@ def main():
     for step in (pbar := tqdm.trange(1000000)):
         rgb_ground_truths, rays = next(dataloader)
 
-        if step % 200 == 0:
+        if step % 50 == 0:
             img = render_frame(nerf, camera, key)
 
             image = np.array(img)

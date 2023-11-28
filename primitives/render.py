@@ -30,7 +30,7 @@ def calc_transmittance(alphas):
     ret = ret + 1e-10
     ret = jnp.cumprod(ret)
     ret = jnp.roll(ret, 1)
-    ret = ret.at[0].set(0)
+    ret = ret.at[0].set(1)
     return ret
 
 def calc_alpha(density, delta):
@@ -68,21 +68,27 @@ def hierarchical_render_single_ray(key, ray, nerf, train=False):
 
     coarse_densities = jax.lax.stop_gradient(coarse_densities)
 
-    # TODO this isnt correct (see mhall p8 (Normalizing these ...))
-    fine_ts = sample_fine(fine_key, 128, coarse_densities, coarse_ts)
+    weights = calc_w(coarse_densities, dists(coarse_ts))
+
+    fine_ts = sample_fine(fine_key, 128, weights, coarse_ts)
     fine_ts = jnp.concatenate((coarse_ts, fine_ts))
+    # fine_ts = jax.lax.stop_gradient(fine_ts) # TODO remove this?
     fine_rgb, _, _ = render_single_ray(ray, fine_ts, nerf, fine_reg_key, train)
 
     return coarse_rgb, fine_rgb
 
 if __name__ == "__main__":
     sample_coarse(jax.random.PRNGKey(0), 16)
-    test_density = jnp.array([0.4, 0.9, 0.5, 0.1])
-    test_deltas  = jnp.array([1.0, 1.0, 1.0, 1.0])
-    T = calc_transmittance(test_density, test_deltas)
+    test_density = jnp.array([0.4, 0.9, 9.5, 0.1, 1.0, 2.0, 4.0, 0.9])
+    test_deltas  = jnp.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
+    test_ts = jnp.array([0.1, 0.2, 0.4, 0.3, 0.2, 0.1, 0.0, 0.2])
+    alphas = calc_alpha(test_density, test_deltas)
+    print(f"{alphas=}")
+    T = calc_transmittance(alphas)
+    print(f"{T=}")
+    print(f"{T.sum()=}")
     w = calc_w(test_density, test_deltas)
     t = jnp.array([0.1, 0.2, 0.5, 0.9, 1.1, 1.8])
+    print(f"{dists(t)=}")
     delta = jnp.diff(t)
-    print(T, w)
-    print(delta)
-    print(dists(t))
+    print(sample_fine(jax.random.PRNGKey(0), 10, test_density, test_ts))

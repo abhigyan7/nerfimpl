@@ -40,10 +40,10 @@ class PinholeCamera(eqx.Module):
         d = self.pose.rotation() @ d
         o = self.pose.translation() + o
 
-        #tn = -(self.n+o[2]) / d[2]
-        #o = o + tn * d
+        tn = -(self.n+o[2]) / d[2]
+        o = o + tn * d
 
-        o = jnp.array([
+        o_prime = jnp.array([
             -(self.f * o[0])/((self.w/2)*o[2]),
             -(self.f * o[1])/((self.h/2)*o[2]),
             1.0+(2.0*self.n)/(o[2]),
@@ -55,9 +55,9 @@ class PinholeCamera(eqx.Module):
             - (2.0*self.n)/(o[2]),
         ])
 
-        d = d / jnp.linalg.norm(d)
+        #d = d / jnp.linalg.norm(d)
 
-        return Ray(o, d)
+        return Ray(o_prime, d)
 
     def get_rays(self):
         us = jnp.arange(self.w)
