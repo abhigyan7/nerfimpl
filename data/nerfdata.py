@@ -4,7 +4,6 @@ import jax
 import json
 import numpy as np
 from PIL import Image
-import equinox as eqx
 import jax.numpy as jnp
 from jaxlie import SE3, SO3
 

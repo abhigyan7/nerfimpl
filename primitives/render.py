@@ -50,8 +50,8 @@ def render_single_ray(ray, ts, nerf, key, train=False):
     #direction = ray.direction / jnp.linalg.norm(ray.direction)
     direction = positional_encoding(ray.direction, 4,10.0)
     nerf_densities, nerf_rgbs = eqx.filter_vmap(nerf, in_axes=(0, None))(locations, direction)
-    # if train:
-    #     nerf_densities = nerf_densities + jax.random.normal(key, nerf_densities.shape)
+    if train:
+        nerf_densities = nerf_densities + jax.random.normal(key, nerf_densities.shape)
     nerf_densities = jax.nn.relu(nerf_densities)
     nerf_rgbs = jax.nn.sigmoid(nerf_rgbs)
     deltas = dists(ts)

@@ -2,12 +2,11 @@
 
 from primitives import mlp
 from primitives.encoding import positional_encoding
-from data.nerfdata import NerfDataloader, NerfDataset
+from data.nerfdata import NerfDataset
 import jax.numpy as jnp
 from PIL import Image
 import numpy as np
 import equinox as eqx
-import jaxlie
 import optax
 import tqdm
 import jax

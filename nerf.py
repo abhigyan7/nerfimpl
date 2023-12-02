@@ -2,12 +2,10 @@
 
 from primitives import mlp, render
 from data.nerfdata import NerfDataloader, NerfDataset
-from primitives.camera import PinholeCamera
 import jax.numpy as jnp
 from PIL import Image
 import numpy as np
 import equinox as eqx
-import jaxlie
 import optax
 import tqdm
 import jax
