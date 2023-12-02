@@ -9,7 +9,7 @@ from primitives.encoding import positional_encoding
 def cart2sph(xyz):
     xy = xyz[0]**2 + xyz[1]**2
     theta = jnp.sqrt(xy + xyz[2]**2)
-    si = jnp.arctan2(jnp.sqrt(xy), xyz[2]) # for elevation angle defined from Z-axis down
+    si = jnp.arctan2(jnp.sqrt(xy), xyz[2])
     r = jnp.arctan2(xyz[1], xyz[0])
     return jnp.array([theta, si, r])
 
@@ -27,7 +27,7 @@ def sample_fine(key, n_points, probs, ts):
 
 def calc_transmittance(alphas):
     ret = 1 - alphas
-    ret = ret + 1e-10
+    ret = jnp.clip(ret, 1e-10, 1.0)
     ret = jnp.cumprod(ret)
     ret = jnp.roll(ret, 1)
     ret = ret.at[0].set(1)
@@ -46,11 +46,12 @@ def dists(ts):
 
 def render_single_ray(ray, ts, nerf, key, train=False):
     xyzs = eqx.filter_vmap(ray)(ts)
-    locations = jax.vmap(lambda x: positional_encoding(x,10,scale=10.0))(xyzs)
-    direction = positional_encoding(ray.direction, 4, scale=10.0)
+    locations = jax.vmap(lambda x: positional_encoding(x,10,8.0))(xyzs)
+    #direction = ray.direction / jnp.linalg.norm(ray.direction)
+    direction = positional_encoding(ray.direction, 4,10.0)
     nerf_densities, nerf_rgbs = eqx.filter_vmap(nerf, in_axes=(0, None))(locations, direction)
-    if train:
-        nerf_densities = nerf_densities + jax.random.normal(key, nerf_densities.shape)
+    # if train:
+    #     nerf_densities = nerf_densities + jax.random.normal(key, nerf_densities.shape)
     nerf_densities = jax.nn.relu(nerf_densities)
     nerf_rgbs = jax.nn.sigmoid(nerf_rgbs)
     deltas = dists(ts)

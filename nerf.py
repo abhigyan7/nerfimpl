@@ -17,6 +17,7 @@ from pathlib import Path
 dataset_path = "/media/data/lego-20231005T103337Z-001/lego/"
 
 BATCH_SIZE = 256
+SCALE = 20.0
 
 @eqx.filter_jit
 def render_line(nerf, rays, key):
@@ -28,12 +29,29 @@ def render_line(nerf, rays, key):
     return fine_rgbs
 
 
-def render_frame(nerf, camera, key):
+def render_frame(nerf, camera, key, n_rays_per_chunk=400):
     rays = camera.get_rays()
-    keys = jax.random.split(key, rays.origin.shape[0])
+    rays_orig_shape = rays.origin.shape
+    total_n_rays = rays_orig_shape[0] * rays_orig_shape[1]
+    n_chunks = int(total_n_rays / n_rays_per_chunk)
+    assert n_chunks * n_rays_per_chunk == total_n_rays
+    keys = jax.random.split(key, n_chunks)
+
+    rays = jax.tree_map(
+        lambda x: x.reshape((n_chunks, n_rays_per_chunk, 3)),
+        rays
+    )
+
     fine_rgbs = jax.lax.map(
             lambda ray_key : render_line(nerf, ray_key[0], ray_key[1]), (rays, keys))
+
+    fine_rgbs = jax.tree_map(
+        lambda x: x.reshape((*rays_orig_shape[:-1], 3)),
+        fine_rgbs
+    )
+
     return fine_rgbs
+
 
 @eqx.filter_jit
 def optimize_one_batch(nerf, rays, rgb_ground_truths, key, optimizer, optimizer_state):
@@ -67,32 +85,25 @@ def main():
 
     nerf = mlp.MhallMLP(nerf_key)
 
-    nerfdataset = NerfDataset(Path(dataset_path), "transforms_train.json", 4.0)
-    nerfdataset_test = NerfDataset(Path(dataset_path), "transforms_test.json", 4.0)
+    nerfdataset = NerfDataset(Path(dataset_path), "transforms_train.json", SCALE)
+    nerfdataset_test = NerfDataset(Path(dataset_path), "transforms_test.json", SCALE)
     dataloader = NerfDataloader(dataloader_key, nerfdataset, BATCH_SIZE)
 
     gt_idx = 23
     ground_truth_image = nerfdataset_test.images[gt_idx]
-    pose = jaxlie.SO3.from_matrix(nerfdataset_test.rotations[gt_idx])
-    pose = jaxlie.SE3.from_rotation_and_translation(pose, nerfdataset_test.translations[gt_idx])
-    camera = PinholeCamera(
-        nerfdataset_test.f[gt_idx],
-        nerfdataset_test.H[gt_idx],
-        nerfdataset_test.W[gt_idx],
-        pose, 0.01)
+    camera = jax.tree_map(lambda x: x[gt_idx], nerfdataset_test.cameras)
 
     img = np.uint8(np.array(ground_truth_image)*255.0)
     image = Image.fromarray(img)
     image.save(f"runs/gt.png")
 
-
-    optimizer = optax.adam(5e-5)
+    optimizer = optax.adam(5e-4)
     optimizer_state = optimizer.init(eqx.filter(nerf, eqx.is_array))
 
     psnr = -1.0
 
     for step in (pbar := tqdm.trange(1000000)):
-        rgb_ground_truths, rays = next(dataloader)
+        rgb_ground_truths, rays = dataloader.get_batch()
 
         if step % 200 == 0:
             img = render_frame(nerf, camera, key)

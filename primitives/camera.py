@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
 
-from functools import partial
-import jax.numpy as jnp
-import equinox as eqx
 import jax
-
-from jaxlie import SE3
-
+import equinox as eqx
+from jaxlie import SE3, SO3
+import jax.numpy as jnp
 from jaxtyping import Float, Array
 
 class Ray(eqx.Module):
@@ -24,7 +21,7 @@ class PinholeCamera(eqx.Module):
     n: Float
     pose: SE3
 
-    def __init__(self, f, h, w, pose, n, c=(0.0, 0.0)):
+    def __init__(self, f, h, w, pose, n=2.0, c=(0.0, 0.0)):
         self.f = f
         self.h = h
         self.w = w
@@ -32,6 +29,7 @@ class PinholeCamera(eqx.Module):
         self.n = n
         self.c = c
 
+    @jax.jit
     def get_ray(self, u: Float, v: Float) -> Ray:
         # should return centers and directions for the specified pixel
         o = jnp.array([0.0, 0.0, 0.0])
@@ -49,15 +47,13 @@ class PinholeCamera(eqx.Module):
             1.0+(2.0*self.n)/(o[2]),
         ])
 
-        d = jnp.array([
+        d_prime = jnp.array([
             - (self.f / (self.w/2)) * ((d[0]/d[2]) - (o[0]/o[2])),
             - (self.f / (self.h/2)) * ((d[1]/d[2]) - (o[1]/o[2])),
             - (2.0*self.n)/(o[2]),
         ])
 
-        #d = d / jnp.linalg.norm(d)
-
-        return Ray(o_prime, d)
+        return Ray(o_prime, d_prime)
 
     def get_rays(self):
         us = jnp.arange(self.w)
@@ -67,3 +63,19 @@ class PinholeCamera(eqx.Module):
             eqx.filter_vmap(self.get_ray, in_axes=(0, 0)),
             in_axes=(0, 0))
         return mapped(us, vs)
+
+if __name__ == "__main__":
+
+    pose = SO3.from_matrix(jnp.eye(3))
+    pose = SE3.from_rotation_and_translation(pose, jnp.zeros((3,)))
+
+    camera = PinholeCamera(
+        100.0,
+        100.0,
+        100.0,
+        pose)
+
+    rays = camera.get_rays()
+    c = camera
+    ray = c.get_ray(0,0)
+    breakpoint()

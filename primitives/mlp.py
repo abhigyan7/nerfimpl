@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 
 import jax
-import jax.numpy as jnp
-
-from jax.nn import relu
-import equinox as eqx
-from equinox.nn import Linear
-
 import jaxtyping
+import equinox as eqx
+from jax.nn import relu
+from jax.nn import leaky_relu as relu
+import jax.numpy as jnp
+from equinox.nn import Linear
 
 
 class ImageFuncMLP(eqx.Module):
@@ -26,11 +25,9 @@ class ImageFuncMLP(eqx.Module):
         ]
 
     def __call__(self, xyz: jax.Array) -> jax.Array:
-
         x = xyz
         for layer in self.layers:
             x = layer(x)
-
         return x
 
 

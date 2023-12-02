@@ -54,6 +54,12 @@ class NerfDataset():
         self.W = np.array(self.W)
         self.f = np.array(self.f)
 
+        self.cameras = jax.vmap(lambda x,h,w,f: PinholeCamera(f, h, w, x)
+                           ) (self.poses,
+                              self.H,
+                              self.W,
+                              self.f)
+
     def __getitem__(self, i):
         return self.images[i], self.poses[i]
 
@@ -72,10 +78,7 @@ class NerfDataloader:
     def __len__(self):
         return len(self.dataset)
 
-    def __iter__(self):
-        return self
-
-    def __next__(self):
+    def get_batch(self):
         self.key, key_b, key_u, key_v = jax.random.split(self.key, 4)
         batch_idx = jax.random.choice(key_b, len(self.dataset), (self.batch_size,))
         us = jax.vmap(lambda x, k: jax.random.uniform(k)*x) (
@@ -91,16 +94,7 @@ class NerfDataloader:
         vs = jnp.int32(vs)
 
         rgb_ground_truths = self.dataset.images[batch_idx]
-        rotations = self.dataset.rotations[batch_idx]
-        translations = self.dataset.translations[batch_idx]
-        rotations_SO3 = jax.vmap(SO3.from_matrix)(rotations)
-        poses = jax.vmap(SE3.from_rotation_and_translation)(rotations_SO3, translations)
         rgb_ground_truths = jax.vmap(lambda x, u, v: x[v][u])(rgb_ground_truths, us, vs)
-
-        cameras = jax.vmap(lambda x,h,w,f: PinholeCamera(f, h, w, x, 0.01)
-                           ) (poses,
-                              self.H[batch_idx],
-                              self.W[batch_idx],
-                              self.dataset.f[batch_idx])
+        cameras = jax.tree_map(lambda x: x[batch_idx], self.dataset.cameras)
         rays = jax.vmap(lambda x, u, v: x.get_ray(u,v))(cameras, us, vs)
         return rgb_ground_truths, rays
