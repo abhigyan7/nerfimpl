@@ -7,7 +7,7 @@ from PIL import Image
 import jax.numpy as jnp
 from jaxlie import SE3, SO3
 
-from nerf.datasets.nerfdata import Dataset
+from nerf.datasets.nerfdata import Dataset, normalize_ts
 from nerf.primitives.camera import PinholeCamera
 
 
@@ -54,6 +54,7 @@ class BlenderDataset(Dataset):
         self.rotations = jnp.stack(self.rotations, 0)
         self.rotations_SO3 = jax.vmap(SO3.from_matrix)(self.rotations)
         self.translations = jnp.stack(self.translations, 0)
+        self.translations = normalize_ts(self.translations)
         self.poses = jax.vmap(SE3.from_rotation_and_translation)(
             self.rotations_SO3, self.translations
         )

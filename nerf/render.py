@@ -54,9 +54,9 @@ def dists(ts):
 
 def render_single_ray(ray, ts, nerf, key, train=False):
     xyzs = eqx.filter_vmap(ray)(ts)
-    locations = jax.vmap(lambda x: positional_encoding(x, 10, 8.0))(xyzs)
+    locations = jax.vmap(lambda x: positional_encoding(x, 10))(xyzs)
     direction = ray.direction / jnp.linalg.norm(ray.direction)
-    direction = positional_encoding(direction, 4, 10.0)
+    direction = positional_encoding(direction, 4)
     nerf_densities, nerf_rgbs = eqx.filter_vmap(nerf, in_axes=(0, None))(
         locations, direction
     )
