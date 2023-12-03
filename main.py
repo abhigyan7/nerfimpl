@@ -10,6 +10,7 @@ import jax
 import optax
 import equinox as eqx
 import jax.numpy as jnp
+from tensorboardX import SummaryWriter
 
 from nerf.primitives.mlp import MhallMLP
 from nerf.utils import PSNR
@@ -17,8 +18,6 @@ from nerf.render import render_frame, hierarchical_render_single_ray
 from nerf.datasets.nerfdata import Dataloader
 from nerf.datasets.blender import BlenderDataset
 
-
-dataset_path = "/media/data/lego-20231005T103337Z-001/lego/"
 
 @eqx.filter_jit
 def optimize_one_batch(nerf, rays, rgb_ground_truths, key, optimizer, optimizer_state):
@@ -42,6 +41,8 @@ def main(conf):
     key = jax.random.PRNGKey(conf.seed)
     nerf_key, dataloader_key, sampler_key = jax.random.split(key, 3)
 
+    writer = SummaryWriter()
+
     nerf = MhallMLP(nerf_key)
 
     nerfdataset = BlenderDataset(conf.dataset_path, "transforms_train.json", conf.scale)
@@ -53,18 +54,20 @@ def main(conf):
     camera = jax.tree_map(lambda x: x[gt_idx], nerfdataset_test.cameras)
 
     img = np.uint8(np.array(ground_truth_image) * 255.0)
+    writer.add_image("ground-truth", np.array(img), 0, dataformats="HWC")
     image = Image.fromarray(img)
     image.save(f"runs/gt.png")
+
 
     optimizer = optax.adam(5e-4)
     optimizer_state = optimizer.init(eqx.filter(nerf, eqx.is_array))
 
-    psnr = -1.0
+    psnr = 0.0
 
     for step in (pbar := tqdm.trange(1000000)):
         rgb_ground_truths, rays = dataloader.get_batch()
 
-        if step % 2000 == 0 and step != 0:
+        if step % 200 == 0 and step != 0:
             img = render_frame(nerf, camera, key)
 
             image = np.array(img)
@@ -72,6 +75,8 @@ def main(conf):
             image = Image.fromarray(image)
             image.save(f"runs/output_{step:09}.png")
             psnr = PSNR(ground_truth_image, img)
+            writer.add_scalar("psnr", psnr, step)
+            writer.add_image("render", np.array(image), step, dataformats="HWC")
 
         key, sampler_key = jax.random.split(key)
         nerf, optimizer_state, loss = optimize_one_batch(
@@ -79,6 +84,7 @@ def main(conf):
         )
 
         pbar.set_description(f"Loss={loss.item():.4f}, PSNR={psnr:.4f}")
+        writer.add_scalar("loss", loss.item(), step)
     return
 
 
