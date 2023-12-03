@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import tqdm
+import argparse
 import numpy as np
 from PIL import Image
 from pathlib import Path
@@ -18,10 +19,6 @@ from nerf.datasets.blender import BlenderDataset
 
 
 dataset_path = "/media/data/lego-20231005T103337Z-001/lego/"
-
-BATCH_SIZE = 256
-SCALE = 1.0
-
 
 @eqx.filter_jit
 def optimize_one_batch(nerf, rays, rgb_ground_truths, key, optimizer, optimizer_state):
@@ -41,16 +38,15 @@ def optimize_one_batch(nerf, rays, rgb_ground_truths, key, optimizer, optimizer_
     return nerf, optimizer_state, loss
 
 
-def main():
-    key = jax.random.PRNGKey(42)
+def main(conf):
+    key = jax.random.PRNGKey(conf.seed)
     nerf_key, dataloader_key, sampler_key = jax.random.split(key, 3)
 
     nerf = MhallMLP(nerf_key)
 
-    nerfdataset = BlenderDataset(Path(dataset_path), "transforms_train.json", SCALE)
-    # nerfdataset_test = BlenderDataset(Path(dataset_path), "transforms_test.json", SCALE)
+    nerfdataset = BlenderDataset(conf.dataset_path, "transforms_train.json", conf.scale)
     nerfdataset_test = nerfdataset
-    dataloader = Dataloader(dataloader_key, nerfdataset, BATCH_SIZE)
+    dataloader = Dataloader(dataloader_key, nerfdataset, conf.batch_size)
 
     gt_idx = 23
     ground_truth_image = nerfdataset_test.images[gt_idx]
@@ -87,4 +83,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dataset-path", type=Path, required=True)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--batch-size", type=int, default=256)
+    parser.add_argument("--chunk-size", type=int, default=400)
+    parser.add_argument("--scale", type=float, default=1.0)
+    conf = parser.parse_args()
+    main(conf)
