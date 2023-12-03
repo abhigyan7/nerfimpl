@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 import equinox as eqx
 
-from primitives.encoding import positional_encoding
+from nerf.primitives.encoding import positional_encoding
 
 def cart2sph(xyz):
     xy = xyz[0]**2 + xyz[1]**2
@@ -78,6 +78,38 @@ def hierarchical_render_single_ray(key, ray, nerf, train=False):
     fine_rgb, _, _ = render_single_ray(ray, fine_ts, nerf, fine_reg_key, train)
 
     return coarse_rgb, fine_rgb
+
+@eqx.filter_jit
+def render_line(nerf, rays, key):
+
+    keys = jax.random.split(key, rays.origin.shape[0])
+    _, fine_rgbs = eqx.filter_vmap(
+                hierarchical_render_single_ray,
+                in_axes=(0, 0, None, None)) (keys, rays, nerf, False)
+    return fine_rgbs
+
+def render_frame(nerf, camera, key, n_rays_per_chunk=400):
+    rays = camera.get_rays()
+    rays_orig_shape = rays.origin.shape
+    total_n_rays = rays_orig_shape[0] * rays_orig_shape[1]
+    n_chunks = int(total_n_rays / n_rays_per_chunk)
+    assert n_chunks * n_rays_per_chunk == total_n_rays
+    keys = jax.random.split(key, n_chunks)
+
+    rays = jax.tree_map(
+        lambda x: x.reshape((n_chunks, n_rays_per_chunk, 3)),
+        rays
+    )
+
+    fine_rgbs = jax.lax.map(
+            lambda ray_key : render_line(nerf, ray_key[0], ray_key[1]), (rays, keys))
+
+    fine_rgbs = jax.tree_map(
+        lambda x: x.reshape((*rays_orig_shape[:-1], 3)),
+        fine_rgbs
+    )
+
+    return fine_rgbs
 
 if __name__ == "__main__":
     sample_coarse(jax.random.PRNGKey(0), 16)

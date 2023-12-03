@@ -1,55 +1,26 @@
 #!/usr/bin/env python3
 
-from primitives import mlp, render
-from data.nerfdata import NerfDataloader, NerfDataset
-import jax.numpy as jnp
-from PIL import Image
-import numpy as np
-import equinox as eqx
-import optax
 import tqdm
-import jax
-
+import numpy as np
+from PIL import Image
 from pathlib import Path
+
+import jax
+import optax
+import equinox as eqx
+import jax.numpy as jnp
+
+from nerf.primitives.mlp import MhallMLP
+from nerf.utils import PSNR
+from nerf.render import render_frame, hierarchical_render_single_ray
+from nerf.datasets.nerfdata import Dataloader
+from nerf.datasets.blender import BlenderDataset
+
 
 dataset_path = "/media/data/lego-20231005T103337Z-001/lego/"
 
 BATCH_SIZE = 256
 SCALE = 1.0
-
-@eqx.filter_jit
-def render_line(nerf, rays, key):
-
-    keys = jax.random.split(key, rays.origin.shape[0])
-    _, fine_rgbs = eqx.filter_vmap(
-                render.hierarchical_render_single_ray,
-                in_axes=(0, 0, None, None)) (keys, rays, nerf, False)
-    return fine_rgbs
-
-
-def render_frame(nerf, camera, key, n_rays_per_chunk=400):
-    rays = camera.get_rays()
-    rays_orig_shape = rays.origin.shape
-    total_n_rays = rays_orig_shape[0] * rays_orig_shape[1]
-    n_chunks = int(total_n_rays / n_rays_per_chunk)
-    assert n_chunks * n_rays_per_chunk == total_n_rays
-    keys = jax.random.split(key, n_chunks)
-
-    rays = jax.tree_map(
-        lambda x: x.reshape((n_chunks, n_rays_per_chunk, 3)),
-        rays
-    )
-
-    fine_rgbs = jax.lax.map(
-            lambda ray_key : render_line(nerf, ray_key[0], ray_key[1]), (rays, keys))
-
-    fine_rgbs = jax.tree_map(
-        lambda x: x.reshape((*rays_orig_shape[:-1], 3)),
-        fine_rgbs
-    )
-
-    return fine_rgbs
-
 
 @eqx.filter_jit
 def optimize_one_batch(nerf, rays, rgb_ground_truths, key, optimizer, optimizer_state):
@@ -58,7 +29,7 @@ def optimize_one_batch(nerf, rays, rgb_ground_truths, key, optimizer, optimizer_
     def loss_fn(nerf, rays, rgb_ground_truths, key):
         keys = jax.random.split(key, rays.origin.shape[0])
         _, fine_rgbs = eqx.filter_vmap(
-            render.hierarchical_render_single_ray,
+            hierarchical_render_single_ray,
             in_axes=(0, 0, None, None)
         ) (keys, rays, nerf, True)
         loss = jnp.mean((fine_rgbs - rgb_ground_truths)**2.0)
@@ -71,22 +42,17 @@ def optimize_one_batch(nerf, rays, rgb_ground_truths, key, optimizer, optimizer_
     return nerf, optimizer_state, loss
 
 
-def PSNR(ground_truth, pred, max_intensity=1.0):
-    MSE = jnp.mean((ground_truth - pred) ** 2.0)
-    psnr = 20 * jnp.log10(max_intensity) - 10 * jnp.log10(MSE)
-    return psnr
-
 def main():
 
     key = jax.random.PRNGKey(42)
     nerf_key, dataloader_key, sampler_key = jax.random.split(key, 3)
 
-    nerf = mlp.MhallMLP(nerf_key)
+    nerf = MhallMLP(nerf_key)
 
-    nerfdataset = NerfDataset(Path(dataset_path), "transforms_train.json", SCALE)
-    #nerfdataset_test = NerfDataset(Path(dataset_path), "transforms_test.json", SCALE)
+    nerfdataset = BlenderDataset(Path(dataset_path), "transforms_train.json", SCALE)
+    #nerfdataset_test = BlenderDataset(Path(dataset_path), "transforms_test.json", SCALE)
     nerfdataset_test = nerfdataset
-    dataloader = NerfDataloader(dataloader_key, nerfdataset, BATCH_SIZE)
+    dataloader = Dataloader(dataloader_key, nerfdataset, BATCH_SIZE)
 
     gt_idx = 23
     ground_truth_image = nerfdataset_test.images[gt_idx]

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
-from primitives import mlp
-from primitives.encoding import positional_encoding
-from data.nerfdata import NerfDataset
+from nerf.primitives import mlp
+from nerf.primitives.encoding import positional_encoding
+from nerf.datasets.blender import BlenderDataset
 import jax.numpy as jnp
 from PIL import Image
 import numpy as np
@@ -62,7 +62,7 @@ def main():
 
     nerf = mlp.ImageFuncMLP(nerf_key)
 
-    nerfdataset = NerfDataset(Path(dataset_path), "transforms_train.json", 8.0)
+    nerfdataset = BlenderDataset(Path(dataset_path), "transforms_train.json", 8.0)
 
     ground_truth_image = nerfdataset.images[0]
 

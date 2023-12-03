@@ -7,7 +7,8 @@ from PIL import Image
 import jax.numpy as jnp
 from jaxlie import SE3, SO3
 
-from primitives.camera import PinholeCamera
+from nerf.datasets.nerfdata import Dataset
+from nerf.primitives.camera import PinholeCamera
 
 def process_transforms_json(frames, scene_path, scale=1.0):
 
@@ -34,7 +35,8 @@ def process_transforms_json(frames, scene_path, scale=1.0):
 
     return images, H, W, f, rotations, translations
 
-class NerfDataset():
+
+class BlenderDataset(Dataset):
 
     def __init__(self, scene_path, transforms_file, scale=1.0):
         with open(scene_path/transforms_file) as f:
@@ -64,38 +66,3 @@ class NerfDataset():
 
     def __len__(self):
         return len(self.images)
-
-
-class NerfDataloader:
-    def __init__(self, key, dataset, batch_size):
-        self.dataset = dataset
-        self.batch_size = batch_size
-        self.key = key
-        self.W = dataset.W
-        self.H = dataset.H
-
-    def __len__(self):
-        return len(self.dataset)
-
-    def get_batch(self):
-        self.key, key_b, key_u, key_v = jax.random.split(self.key, 4)
-        batch_idx = jax.random.choice(key_b, len(self.dataset), (self.batch_size,))
-        us = jax.vmap(lambda x, k: jax.random.uniform(k)*x) (
-            self.W[batch_idx],
-            jax.random.split(key_u, self.batch_size),
-        )
-
-        vs = jax.vmap(lambda x, k: jax.random.uniform(k)*x) (
-            self.H[batch_idx],
-            jax.random.split(key_v, self.batch_size),
-        )
-        us = jnp.int32(us)
-        vs = jnp.int32(vs)
-
-        rgb_ground_truths = jax.vmap(
-            lambda images, batch_id, u, v: images[batch_id,v,u],
-            in_axes=[None, 0, 0, 0],
-        )(self.dataset.images, batch_idx, us, vs)
-        cameras = jax.tree_map(lambda x: x[batch_idx], self.dataset.cameras)
-        rays = jax.vmap(lambda x, u, v: x.get_ray(u,v))(cameras, us, vs)
-        return rgb_ground_truths, rays
