@@ -1,5 +1,7 @@
 absl-py==2.0.0
+black==23.11.0
 chex==0.1.85
+click==8.1.7
 docstring-parser==0.15
 equinox==0.11.2
 jax==0.4.20
@@ -10,6 +12,7 @@ jaxtyping==0.2.23
 markdown-it-py==3.0.0
 mdurl==0.1.2
 ml-dtypes==0.3.1
+mypy-extensions==1.0.0
 numpy==1.26.2
 nvidia-cublas-cu12==12.3.4.1
 nvidia-cuda-cupti-cu12==12.3.101
@@ -25,11 +28,15 @@ nvidia-nvjitlink-cu12==12.3.101
 opt-einsum==3.3.0
 optax==0.1.7
 overrides==7.4.0
+packaging==23.2
+pathspec==0.11.2
 Pillow==10.1.0
+platformdirs==4.0.0
 Pygments==2.17.2
 rich==13.7.0
 scipy==1.11.4
 shtab==1.6.4
+tomli==2.0.1
 toolz==0.12.0
 tqdm==4.66.1
 typeguard==2.13.3

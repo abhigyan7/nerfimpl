@@ -6,17 +6,20 @@ import equinox as eqx
 
 from nerf.primitives.encoding import positional_encoding
 
+
 def cart2sph(xyz):
-    xy = xyz[0]**2 + xyz[1]**2
-    theta = jnp.sqrt(xy + xyz[2]**2)
+    xy = xyz[0] ** 2 + xyz[1] ** 2
+    theta = jnp.sqrt(xy + xyz[2] ** 2)
     si = jnp.arctan2(jnp.sqrt(xy), xyz[2])
     r = jnp.arctan2(xyz[1], xyz[0])
     return jnp.array([theta, si, r])
+
 
 def sample_coarse(key, n_points):
     points = jnp.arange(n_points) + jax.random.uniform(key, (n_points,))
     points = points / n_points
     return points
+
 
 def sample_fine(key, n_points, probs, ts):
     uniform_samples = jax.random.uniform(key, (n_points,))
@@ -24,6 +27,7 @@ def sample_fine(key, n_points, probs, ts):
     p_cdf = jnp.cumsum(probs)
     p_cdf = p_cdf / p_cdf.max()
     return jnp.interp(uniform_samples, p_cdf, ts)
+
 
 def calc_transmittance(alphas):
     ret = 1 - alphas
@@ -33,23 +37,29 @@ def calc_transmittance(alphas):
     ret = ret.at[0].set(1)
     return ret
 
+
 def calc_alpha(density, delta):
     return 1.0 - jnp.exp(-density * delta)
+
 
 def calc_w(density, delta):
     alphas = calc_alpha(density, delta)
     T = calc_transmittance(alphas)
     return T * alphas
 
+
 def dists(ts):
     return jnp.diff(ts, append=1e10)
 
+
 def render_single_ray(ray, ts, nerf, key, train=False):
     xyzs = eqx.filter_vmap(ray)(ts)
-    locations = jax.vmap(lambda x: positional_encoding(x,10,8.0))(xyzs)
+    locations = jax.vmap(lambda x: positional_encoding(x, 10, 8.0))(xyzs)
     direction = ray.direction / jnp.linalg.norm(ray.direction)
-    direction = positional_encoding(direction, 4,10.0)
-    nerf_densities, nerf_rgbs = eqx.filter_vmap(nerf, in_axes=(0, None))(locations, direction)
+    direction = positional_encoding(direction, 4, 10.0)
+    nerf_densities, nerf_rgbs = eqx.filter_vmap(nerf, in_axes=(0, None))(
+        locations, direction
+    )
     if train:
         nerf_densities = nerf_densities + jax.random.normal(key, nerf_densities.shape)
     nerf_densities = jax.nn.relu(nerf_densities)
@@ -59,12 +69,15 @@ def render_single_ray(ray, ts, nerf, key, train=False):
     rgb = jnp.dot(w, nerf_rgbs)
     return rgb, nerf_densities, nerf_rgbs
 
+
 def hierarchical_render_single_ray(key, ray, nerf, train=False):
     coarse_reg_key, fine_reg_key, key = jax.random.split(key, 3)
     coarse_key, fine_key = jax.random.split(key, 2)
     coarse_ts = sample_coarse(coarse_key, 64)
     coarse_ts_scaled = 2.0 + 4.0 * coarse_ts
-    coarse_rgb, coarse_densities, _ = render_single_ray(ray, coarse_ts_scaled, nerf, coarse_reg_key, train)
+    coarse_rgb, coarse_densities, _ = render_single_ray(
+        ray, coarse_ts_scaled, nerf, coarse_reg_key, train
+    )
 
     coarse_densities = jax.lax.stop_gradient(coarse_densities)
 
@@ -79,14 +92,15 @@ def hierarchical_render_single_ray(key, ray, nerf, train=False):
 
     return coarse_rgb, fine_rgb
 
+
 @eqx.filter_jit
 def render_line(nerf, rays, key):
-
     keys = jax.random.split(key, rays.origin.shape[0])
     _, fine_rgbs = eqx.filter_vmap(
-                hierarchical_render_single_ray,
-                in_axes=(0, 0, None, None)) (keys, rays, nerf, False)
+        hierarchical_render_single_ray, in_axes=(0, 0, None, None)
+    )(keys, rays, nerf, False)
     return fine_rgbs
+
 
 def render_frame(nerf, camera, key, n_rays_per_chunk=400):
     rays = camera.get_rays()
@@ -96,25 +110,21 @@ def render_frame(nerf, camera, key, n_rays_per_chunk=400):
     assert n_chunks * n_rays_per_chunk == total_n_rays
     keys = jax.random.split(key, n_chunks)
 
-    rays = jax.tree_map(
-        lambda x: x.reshape((n_chunks, n_rays_per_chunk, 3)),
-        rays
-    )
+    rays = jax.tree_map(lambda x: x.reshape((n_chunks, n_rays_per_chunk, 3)), rays)
 
     fine_rgbs = jax.lax.map(
-            lambda ray_key : render_line(nerf, ray_key[0], ray_key[1]), (rays, keys))
-
-    fine_rgbs = jax.tree_map(
-        lambda x: x.reshape((*rays_orig_shape[:-1], 3)),
-        fine_rgbs
+        lambda ray_key: render_line(nerf, ray_key[0], ray_key[1]), (rays, keys)
     )
 
+    fine_rgbs = jax.tree_map(lambda x: x.reshape((*rays_orig_shape[:-1], 3)), fine_rgbs)
+
     return fine_rgbs
+
 
 if __name__ == "__main__":
     sample_coarse(jax.random.PRNGKey(0), 16)
     test_density = jnp.array([0.4, 0.9, 9.5, 0.1, 1.0, 2.0, 4.0, 0.9])
-    test_deltas  = jnp.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
+    test_deltas = jnp.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
     test_ts = jnp.array([0.1, 0.2, 0.4, 0.3, 0.2, 0.1, 0.0, 0.2])
     alphas = calc_alpha(test_density, test_deltas)
     print(f"{alphas=}")

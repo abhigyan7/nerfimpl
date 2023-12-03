@@ -22,17 +22,16 @@ dataset_path = "/media/data/lego-20231005T103337Z-001/lego/"
 BATCH_SIZE = 256
 SCALE = 1.0
 
+
 @eqx.filter_jit
 def optimize_one_batch(nerf, rays, rgb_ground_truths, key, optimizer, optimizer_state):
-
     @eqx.filter_value_and_grad
     def loss_fn(nerf, rays, rgb_ground_truths, key):
         keys = jax.random.split(key, rays.origin.shape[0])
         _, fine_rgbs = eqx.filter_vmap(
-            hierarchical_render_single_ray,
-            in_axes=(0, 0, None, None)
-        ) (keys, rays, nerf, True)
-        loss = jnp.mean((fine_rgbs - rgb_ground_truths)**2.0)
+            hierarchical_render_single_ray, in_axes=(0, 0, None, None)
+        )(keys, rays, nerf, True)
+        loss = jnp.mean((fine_rgbs - rgb_ground_truths) ** 2.0)
         return loss
 
     loss, grad = loss_fn(nerf, rays, rgb_ground_truths, key)
@@ -43,14 +42,13 @@ def optimize_one_batch(nerf, rays, rgb_ground_truths, key, optimizer, optimizer_
 
 
 def main():
-
     key = jax.random.PRNGKey(42)
     nerf_key, dataloader_key, sampler_key = jax.random.split(key, 3)
 
     nerf = MhallMLP(nerf_key)
 
     nerfdataset = BlenderDataset(Path(dataset_path), "transforms_train.json", SCALE)
-    #nerfdataset_test = BlenderDataset(Path(dataset_path), "transforms_test.json", SCALE)
+    # nerfdataset_test = BlenderDataset(Path(dataset_path), "transforms_test.json", SCALE)
     nerfdataset_test = nerfdataset
     dataloader = Dataloader(dataloader_key, nerfdataset, BATCH_SIZE)
 
@@ -58,7 +56,7 @@ def main():
     ground_truth_image = nerfdataset_test.images[gt_idx]
     camera = jax.tree_map(lambda x: x[gt_idx], nerfdataset_test.cameras)
 
-    img = np.uint8(np.array(ground_truth_image)*255.0)
+    img = np.uint8(np.array(ground_truth_image) * 255.0)
     image = Image.fromarray(img)
     image.save(f"runs/gt.png")
 
@@ -74,17 +72,19 @@ def main():
             img = render_frame(nerf, camera, key)
 
             image = np.array(img)
-            image = np.uint8(np.clip(image*255.0, 0, 255))
+            image = np.uint8(np.clip(image * 255.0, 0, 255))
             image = Image.fromarray(image)
             image.save(f"runs/output_{step:09}.png")
             psnr = PSNR(ground_truth_image, img)
 
         key, sampler_key = jax.random.split(key)
         nerf, optimizer_state, loss = optimize_one_batch(
-            nerf, rays, rgb_ground_truths, sampler_key, optimizer, optimizer_state)
+            nerf, rays, rgb_ground_truths, sampler_key, optimizer, optimizer_state
+        )
 
         pbar.set_description(f"Loss={loss.item():.4f}, PSNR={psnr:.4f}")
     return
+
 
 if __name__ == "__main__":
     main()
