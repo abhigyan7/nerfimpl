@@ -92,8 +92,10 @@ class NerfDataloader:
         us = jnp.int32(us)
         vs = jnp.int32(vs)
 
-        rgb_ground_truths = self.dataset.images[batch_idx]
-        rgb_ground_truths = jax.vmap(lambda x, u, v: x[v][u])(rgb_ground_truths, us, vs)
+        rgb_ground_truths = jax.vmap(
+            lambda images, batch_id, u, v: images[batch_id,v,u],
+            in_axes=[None, 0, 0, 0],
+        )(self.dataset.images, batch_idx, us, vs)
         cameras = jax.tree_map(lambda x: x[batch_idx], self.dataset.cameras)
         rays = jax.vmap(lambda x, u, v: x.get_ray(u,v))(cameras, us, vs)
         return rgb_ground_truths, rays

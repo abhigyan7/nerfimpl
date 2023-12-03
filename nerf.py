@@ -15,7 +15,7 @@ from pathlib import Path
 dataset_path = "/media/data/lego-20231005T103337Z-001/lego/"
 
 BATCH_SIZE = 256
-SCALE = 20.0
+SCALE = 1.0
 
 @eqx.filter_jit
 def render_line(nerf, rays, key):
@@ -84,7 +84,8 @@ def main():
     nerf = mlp.MhallMLP(nerf_key)
 
     nerfdataset = NerfDataset(Path(dataset_path), "transforms_train.json", SCALE)
-    nerfdataset_test = NerfDataset(Path(dataset_path), "transforms_test.json", SCALE)
+    #nerfdataset_test = NerfDataset(Path(dataset_path), "transforms_test.json", SCALE)
+    nerfdataset_test = nerfdataset
     dataloader = NerfDataloader(dataloader_key, nerfdataset, BATCH_SIZE)
 
     gt_idx = 23
@@ -103,7 +104,7 @@ def main():
     for step in (pbar := tqdm.trange(1000000)):
         rgb_ground_truths, rays = dataloader.get_batch()
 
-        if step % 200 == 0:
+        if step % 2000 == 0 and step != 0:
             img = render_frame(nerf, camera, key)
 
             image = np.array(img)

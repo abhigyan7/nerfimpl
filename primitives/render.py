@@ -47,8 +47,8 @@ def dists(ts):
 def render_single_ray(ray, ts, nerf, key, train=False):
     xyzs = eqx.filter_vmap(ray)(ts)
     locations = jax.vmap(lambda x: positional_encoding(x,10,8.0))(xyzs)
-    #direction = ray.direction / jnp.linalg.norm(ray.direction)
-    direction = positional_encoding(ray.direction, 4,10.0)
+    direction = ray.direction / jnp.linalg.norm(ray.direction)
+    direction = positional_encoding(direction, 4,10.0)
     nerf_densities, nerf_rgbs = eqx.filter_vmap(nerf, in_axes=(0, None))(locations, direction)
     if train:
         nerf_densities = nerf_densities + jax.random.normal(key, nerf_densities.shape)
@@ -63,7 +63,8 @@ def hierarchical_render_single_ray(key, ray, nerf, train=False):
     coarse_reg_key, fine_reg_key, key = jax.random.split(key, 3)
     coarse_key, fine_key = jax.random.split(key, 2)
     coarse_ts = sample_coarse(coarse_key, 64)
-    coarse_rgb, coarse_densities, _ = render_single_ray(ray, coarse_ts, nerf, coarse_reg_key, train)
+    coarse_ts_scaled = 2.0 + 4.0 * coarse_ts
+    coarse_rgb, coarse_densities, _ = render_single_ray(ray, coarse_ts_scaled, nerf, coarse_reg_key, train)
 
     coarse_densities = jax.lax.stop_gradient(coarse_densities)
 
@@ -71,6 +72,7 @@ def hierarchical_render_single_ray(key, ray, nerf, train=False):
 
     fine_ts = sample_fine(fine_key, 128, weights, coarse_ts)
     fine_ts = jnp.concatenate((coarse_ts, fine_ts))
+    fine_ts = 2.0 + 4.0 * fine_ts
     fine_ts = jnp.sort(fine_ts)
 
     fine_rgb, _, _ = render_single_ray(ray, fine_ts, nerf, fine_reg_key, train)
