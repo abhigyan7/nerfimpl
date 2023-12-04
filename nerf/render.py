@@ -70,13 +70,13 @@ def render_single_ray(ray, ts, nerf, key, train=False):
     return rgb, nerf_densities, nerf_rgbs
 
 
-def hierarchical_render_single_ray(key, ray, nerf, train=False):
+def hierarchical_render_single_ray(key, ray, nerfs, train=False):
     coarse_reg_key, fine_reg_key, key = jax.random.split(key, 3)
     coarse_key, fine_key = jax.random.split(key, 2)
     coarse_ts = sample_coarse(coarse_key, 64)
-    coarse_ts_scaled = 2.0 + 4.0 * coarse_ts
+    coarse_ts_scaled = 2.0 + 6.0 * coarse_ts
     coarse_rgb, coarse_densities, _ = render_single_ray(
-        ray, coarse_ts_scaled, nerf, coarse_reg_key, train
+        ray, coarse_ts_scaled, nerfs[0], coarse_reg_key, train
     )
 
     coarse_densities = jax.lax.stop_gradient(coarse_densities)
@@ -85,35 +85,38 @@ def hierarchical_render_single_ray(key, ray, nerf, train=False):
 
     fine_ts = sample_fine(fine_key, 128, weights, coarse_ts)
     fine_ts = jnp.concatenate((coarse_ts, fine_ts))
-    fine_ts = 2.0 + 4.0 * fine_ts
+    fine_ts = 2.0 + 6.0 * fine_ts
     fine_ts = jnp.sort(fine_ts)
 
-    fine_rgb, _, _ = render_single_ray(ray, fine_ts, nerf, fine_reg_key, train)
+    fine_rgb, _, _ = render_single_ray(ray, fine_ts, nerfs[1], fine_reg_key, train)
 
     return coarse_rgb, fine_rgb
 
 
 @eqx.filter_jit
-def render_line(nerf, rays, key):
+def render_line(nerfs, rays, key):
     keys = jax.random.split(key, rays.origin.shape[0])
     _, fine_rgbs = eqx.filter_vmap(
         hierarchical_render_single_ray, in_axes=(0, 0, None, None)
-    )(keys, rays, nerf, False)
+    )(keys, rays, nerfs, False)
     return fine_rgbs
 
 
-def render_frame(nerf, camera, key, n_rays_per_chunk=400):
+def render_frame(nerfs, camera, key, n_rays_per_chunk=400):
     rays = camera.get_rays()
     rays_orig_shape = rays.origin.shape
     total_n_rays = rays_orig_shape[0] * rays_orig_shape[1]
-    n_chunks = int(total_n_rays / n_rays_per_chunk)
+    if total_n_rays > n_rays_per_chunk:
+        n_chunks = int(total_n_rays / n_rays_per_chunk)
+    else:
+        n_chunks = 1
     assert n_chunks * n_rays_per_chunk == total_n_rays
     keys = jax.random.split(key, n_chunks)
 
     rays = jax.tree_map(lambda x: x.reshape((n_chunks, n_rays_per_chunk, 3)), rays)
 
     fine_rgbs = jax.lax.map(
-        lambda ray_key: render_line(nerf, ray_key[0], ray_key[1]), (rays, keys)
+        lambda ray_key: render_line(nerfs, ray_key[0], ray_key[1]), (rays, keys)
     )
 
     fine_rgbs = jax.tree_map(lambda x: x.reshape((*rays_orig_shape[:-1], 3)), fine_rgbs)

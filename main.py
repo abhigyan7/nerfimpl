@@ -20,30 +20,36 @@ from nerf.datasets.blender import BlenderDataset
 
 
 @eqx.filter_jit
-def optimize_one_batch(nerf, rays, rgb_ground_truths, key, optimizer, optimizer_state):
+def optimize_one_batch(nerfs, rays, rgb_ground_truths, key, optimizer, optimizer_state):
     @eqx.filter_value_and_grad
-    def loss_fn(nerf, rays, rgb_ground_truths, key):
+    def loss_fn(nerfs, rays, rgb_ground_truths, key):
         keys = jax.random.split(key, rays.origin.shape[0])
-        _, fine_rgbs = eqx.filter_vmap(
+        coarse_rgbs, fine_rgbs = eqx.filter_vmap(
             hierarchical_render_single_ray, in_axes=(0, 0, None, None)
-        )(keys, rays, nerf, True)
-        loss = jnp.mean((fine_rgbs - rgb_ground_truths) ** 2.0)
+        )(keys, rays, nerfs, True)
+        loss = jnp.mean((fine_rgbs - rgb_ground_truths) ** 2.0) + jnp.mean(
+            (coarse_rgbs - rgb_ground_truths) ** 2.0
+        )
         return loss
 
-    loss, grad = loss_fn(nerf, rays, rgb_ground_truths, key)
-    updates, optimizer_state = optimizer.update(grad, optimizer_state, nerf)
-    nerf = eqx.apply_updates(nerf, updates)
+    loss, grad = loss_fn(nerfs, rays, rgb_ground_truths, key)
+    updates, optimizer_state = optimizer.update(grad, optimizer_state, nerfs)
+    nerfs = eqx.apply_updates(nerfs, updates)
 
-    return nerf, optimizer_state, loss
+    return nerfs, optimizer_state, loss
 
 
 def main(conf):
     key = jax.random.PRNGKey(conf.seed)
-    nerf_key, dataloader_key, sampler_key = jax.random.split(key, 3)
+    coarse_nerf_key, fine_nerf_key, dataloader_key, sampler_key = jax.random.split(
+        key, 4
+    )
 
     writer = SummaryWriter()
 
-    nerf = MhallMLP(nerf_key)
+    coarse_nerf = MhallMLP(coarse_nerf_key)
+    fine_nerf = MhallMLP(fine_nerf_key)
+    nerfs = (coarse_nerf, fine_nerf)
 
     nerfdataset = BlenderDataset(conf.dataset_path, "transforms_train.json", conf.scale)
     nerfdataset_test = nerfdataset
@@ -58,17 +64,17 @@ def main(conf):
     image = Image.fromarray(img)
     image.save(f"runs/gt.png")
 
-
     optimizer = optax.adam(5e-4)
-    optimizer_state = optimizer.init(eqx.filter(nerf, eqx.is_array))
+    optimizer_state = optimizer.init(eqx.filter(nerfs, eqx.is_array))
 
     psnr = 0.0
 
     for step in (pbar := tqdm.trange(1000000)):
         rgb_ground_truths, rays = dataloader.get_batch()
 
-        if step % 200 == 0 and step != 0:
-            img = render_frame(nerf, camera, key)
+        if step % 200 == 0:
+
+            img = render_frame(nerfs, camera, key, conf.chunk_size)
 
             image = np.array(img)
             image = np.uint8(np.clip(image * 255.0, 0, 255))
@@ -79,8 +85,8 @@ def main(conf):
             writer.add_image("render", np.array(image), step, dataformats="HWC")
 
         key, sampler_key = jax.random.split(key)
-        nerf, optimizer_state, loss = optimize_one_batch(
-            nerf, rays, rgb_ground_truths, sampler_key, optimizer, optimizer_state
+        nerfs, optimizer_state, loss = optimize_one_batch(
+            nerfs, rays, rgb_ground_truths, sampler_key, optimizer, optimizer_state
         )
 
         pbar.set_description(f"Loss={loss.item():.4f}, PSNR={psnr:.4f}")
