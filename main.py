@@ -13,7 +13,7 @@ import jax.numpy as jnp
 from tensorboardX import SummaryWriter
 
 from nerf.primitives.mlp import MhallMLP
-from nerf.utils import PSNR
+from nerf import utils
 from nerf.render import render_frame, hierarchical_render_single_ray
 from nerf.datasets.nerfdata import Dataloader
 from nerf.datasets.blender import BlenderDataset
@@ -59,9 +59,8 @@ def main(conf):
     ground_truth_image = nerfdataset_test.images[gt_idx]
     camera = jax.tree_map(lambda x: x[gt_idx], nerfdataset_test.cameras)
 
-    img = np.uint8(np.array(ground_truth_image) * 255.0)
-    writer.add_image("ground-truth", np.array(img), 0, dataformats="HWC")
-    image = Image.fromarray(img)
+    image = utils.jax_to_PIL(ground_truth_image)
+    writer.add_image("ground-truth", np.array(image), 0, dataformats="HWC")
     image.save(f"runs/gt.png")
 
     optimizer = optax.adam(5e-4)
@@ -76,11 +75,10 @@ def main(conf):
 
             img = render_frame(nerfs, camera, key, conf.chunk_size)
 
-            image = np.array(img)
-            image = np.uint8(np.clip(image * 255.0, 0, 255))
-            image = Image.fromarray(image)
+            image = utils.jax_to_PIL(img)
             image.save(f"runs/output_{step:09}.png")
-            psnr = PSNR(ground_truth_image, img)
+            psnr = utils.PSNR(ground_truth_image, img)
+
             writer.add_scalar("psnr", psnr, step)
             writer.add_image("render", np.array(image), step, dataformats="HWC")
 
@@ -89,7 +87,7 @@ def main(conf):
             nerfs, rays, rgb_ground_truths, sampler_key, optimizer, optimizer_state
         )
 
-        pbar.set_description(f"Loss={loss.item():.4f}, PSNR={psnr:.4f}")
+        pbar.set_description(f"Loss={loss.item():.4f}, utils.PSNR={psnr:.4f}")
         writer.add_scalar("loss", loss.item(), step)
     return
 
