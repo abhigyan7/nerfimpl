@@ -7,7 +7,7 @@ from PIL import Image
 import jax.numpy as jnp
 from jaxlie import SE3, SO3
 
-from nerf.datasets.nerfdata import Dataset, normalize_ts
+from nerf.datasets.nerfdata import Dataset, normalize_ts, normalize_ts_minmax
 from nerf.primitives.camera import PinholeCamera
 
 
@@ -37,7 +37,7 @@ def process_transforms_json(frames, scene_path, scale=1.0):
 
 
 class BlenderDataset(Dataset):
-    def __init__(self, scene_path, transforms_file, scale=1.0):
+    def __init__(self, scene_path, transforms_file, scale=1.0, t_min=None, t_max=None):
         with open(scene_path / transforms_file) as f:
             frames = json.load(f)
             outputs = process_transforms_json(frames, scene_path, scale)
@@ -54,7 +54,15 @@ class BlenderDataset(Dataset):
         self.rotations = jnp.stack(self.rotations, 0)
         self.rotations_SO3 = jax.vmap(SO3.from_matrix)(self.rotations)
         self.translations = jnp.stack(self.translations, 0)
-        self.translations = normalize_ts(self.translations)
+        print(f"Loading dataset from file {transforms_file}")
+        if t_min is None:
+            self.translations, self.t_min, self.t_max = normalize_ts_minmax(self.translations)
+            print(f"Used {self.t_min=}, {self.t_max=}")
+        else:
+            self.translations = normalize_ts(self.translations, t_min, t_max)
+            self.t_min = t_min
+            self.t_max = t_max
+            print(f"Used {self.t_min=}, {self.t_max=}")
         self.poses = jax.vmap(SE3.from_rotation_and_translation)(
             self.rotations_SO3, self.translations
         )

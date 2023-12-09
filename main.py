@@ -91,10 +91,14 @@ def train(**conf):
         print(f"Resuming training from step {start_step}.")
 
     nerfdataset = BlenderDataset(conf["dataset_path"], "transforms_train.json", conf["scale"])
-    nerfdataset_test = nerfdataset
+    nerfdataset_test = BlenderDataset(
+        conf["dataset_path"], 
+        "transforms_test.json", 
+        conf["scale"], 
+        nerfdataset.t_min, nerfdataset.t_max)
     dataloader = Dataloader(dataloader_key, nerfdataset, conf["batch_size"])
 
-    gt_ids = jnp.array([0, 23, 50, 75, 90], dtype=jnp.int32)
+    gt_ids = jnp.array([0, 23, 50, 75, 90, 110, 130, 150], dtype=jnp.int32)
     ground_truth_images = jax.vmap(lambda i: nerfdataset_test.images[i]) (gt_ids)
 
     cameras = []

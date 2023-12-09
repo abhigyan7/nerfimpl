@@ -53,9 +53,14 @@ class Dataloader:
         rays = jax.vmap(lambda x, u, v: x.get_ray(u, v))(cameras, us, vs)
         return rgb_ground_truths, rays
 
-def normalize_ts(ts):
+def normalize_ts_minmax(ts):
     min = ts.min()
     max = ts.max()
+    ts = (ts - min) / (max - min) # 0 to 1
+    ts = ts * 2.0 - 1.0 # -1 to 1
+    return ts, min, max
+
+def normalize_ts(ts, min, max):
     ts = (ts - min) / (max - min) # 0 to 1
     ts = ts * 2.0 - 1.0 # -1 to 1
     return ts
