@@ -65,6 +65,7 @@ def train(**conf):
     writer = SummaryWriter(logdir)
     ckpt_dir = logdir / "ckpts"
     ckpt_file = ckpt_dir / "nerf.eqx"
+    optstate_file = ckpt_dir / "optstate.eqx"
     render_dir = logdir / "renders"
     os.makedirs(logdir, exist_ok=True)
     os.makedirs(ckpt_dir, exist_ok=True)
@@ -80,10 +81,13 @@ def train(**conf):
 
     if conf["resume_from"] is not None:
         assert ckpt_file.exists(), "NeRF checkpoint not found"
-        (nerfs, optimizer_state), train_state = deserialize(
-            (nerfs, optimizer_state), ckpt_file)
+        nerfs, train_state = deserialize(
+            nerfs, ckpt_file)
         start_step = train_state["step"]
         print(f"Loaded checkpoints from {ckpt_file}.")
+        optimizer_state = deserialize(
+            optimizer_state, optstate_file, has_metadata=False)
+        print(f"Loaded optimizer state from {optstate_file}.")
         print(f"Resuming training from step {start_step}.")
 
     nerfdataset = BlenderDataset(conf["dataset_path"], "transforms_train.json", conf["scale"])
@@ -132,7 +136,8 @@ def train(**conf):
             writer.add_scalar("psnr", psnr, step)
 
         if step % conf["checkpoint_every"] == 0 and step > 0:
-            serialize((nerfs, optimizer_state), {"step":step}, ckpt_file)
+            serialize(nerfs, ckpt_file, {"step":step})
+            serialize(optimizer_state, optstate_file, metadata=None)
 
         pbar.set_description(f"Loss={loss.item():.4f}, utils.PSNR={psnr:.4f}")
         writer.add_scalar("loss", loss.item(), step)

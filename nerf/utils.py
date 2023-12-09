@@ -23,20 +23,24 @@ def jax_to_PIL(img):
     return image
 
 
-def serialize(parameters, metadata, checkpoint_filepath):
+def serialize(parameters, checkpoint_filepath, metadata=None):
     """# Dump metadata as json to a file and append model parameters. #########"""
-    metadata= json.dumps(metadata)
     with open(checkpoint_filepath, "wb") as f:
-        f.write((metadata + "\n").encode())
+        if metadata is not None:
+            metadata= json.dumps(metadata)
+            f.write((metadata + "\n").encode())
         eqx.tree_serialise_leaves(f, parameters)
 
 
-def deserialize(parameters, checkpoint_filepath):
+def deserialize(parameters, checkpoint_filepath, has_metadata=True):
     """# Load metadata and model parameters."""
     with open(checkpoint_filepath, "rb") as f:
-        metadata = json.loads(f.readline().decode())
+        if has_metadata:
+            metadata = json.loads(f.readline().decode())
         parameters = eqx.tree_deserialise_leaves(f, parameters)
-    return parameters, metadata
+    if has_metadata:
+        return parameters, metadata
+    return parameters
 
 
 def timing(f):
