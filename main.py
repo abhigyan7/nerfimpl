@@ -34,7 +34,7 @@ def optimize_one_batch(nerfs, rays, rgb_ground_truths, key, optimizer, optimizer
         return loss
 
     loss, grad = loss_fn(nerfs, rays, rgb_ground_truths, key)
-    updates, optimizer_state = optimizer.update(grad, optimizer_state, nerfs)
+    updates, optimizer_state = optimizer.update(grad, optimizer_state)
     nerfs = eqx.apply_updates(nerfs, updates)
 
     return nerfs, optimizer_state, loss
@@ -44,6 +44,7 @@ def optimize_one_batch(nerfs, rays, rgb_ground_truths, key, optimizer, optimizer
 @click.option('--dataset-path', type=Path, required=True)
 @click.option('--seed', type=int, default=42)
 @click.option('--batch-size', type=int, default=256)
+@click.option('--lr', type=float, default=5e-4)
 @click.option('--chunk-size', type=int, default=400)
 @click.option('--scale', type=float, default=1.0)
 @click.option('--num-steps', type=int, default=1e7)
@@ -73,11 +74,17 @@ def train(**conf):
     fine_nerf = MhallMLP(fine_nerf_key)
     nerfs = [coarse_nerf, fine_nerf]
     start_step = 0
+    lr_sched = optax.cosine_decay_schedule(conf["lr"], conf["num_steps"])
+    optimizer = optax.adam(lr_sched)
+    optimizer_state = optimizer.init(eqx.filter(nerfs, eqx.is_array))
+
     if conf["resume_from"] is not None:
         assert ckpt_file.exists(), "NeRF checkpoint not found"
-        nerfs, train_state = deserialize(nerfs, ckpt_file)
+        (nerfs, optimizer_state), train_state = deserialize(
+            (nerfs, optimizer_state), ckpt_file)
         start_step = train_state["step"]
-        print(f"Loaded checkpoints from {ckpt_file}.\nResuming training from step {start_step}.")
+        print(f"Loaded checkpoints from {ckpt_file}.")
+        print(f"Resuming training from step {start_step}.")
 
     nerfdataset = BlenderDataset(conf["dataset_path"], "transforms_train.json", conf["scale"])
     nerfdataset_test = nerfdataset
@@ -99,8 +106,6 @@ def train(**conf):
         image.save(logdir/f"gt_{gt_id}.png")
         os.makedirs(render_dir/f"{gt_id}", exist_ok=True)
 
-    optimizer = optax.adam(5e-4)
-    optimizer_state = optimizer.init(eqx.filter(nerfs, eqx.is_array))
 
     psnr = 0.0
     pbar = trange(start_step, conf["num_steps"], initial=start_step, total=conf["num_steps"])
@@ -127,10 +132,13 @@ def train(**conf):
             writer.add_scalar("psnr", psnr, step)
 
         if step % conf["checkpoint_every"] == 0 and step > 0:
-            serialize(nerfs, {"step":step}, ckpt_file)
+            serialize((nerfs, optimizer_state), {"step":step}, ckpt_file)
 
         pbar.set_description(f"Loss={loss.item():.4f}, utils.PSNR={psnr:.4f}")
         writer.add_scalar("loss", loss.item(), step)
+        writer.add_scalar("learning rate", 
+            lr_sched(optimizer_state[1].count.item()), step )
+
 
     print("Training done!")
     return
