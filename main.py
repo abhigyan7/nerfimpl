@@ -127,17 +127,23 @@ def train(**conf):
         )
 
         if step % conf["render_every"] == 0 or (step+1) == conf["num_steps"]:
-            imgs = list(map(
+            rendered_imgs = list(map(
                 lambda c: render_frame(nerfs, c, key, conf["chunk_size"]),
                 tqdm(cameras, desc="Rendering test images: ", leave=False)
             ))
-            for i, img in zip(gt_ids, imgs):
-                image = jax_to_PIL(img)
-                image.save(render_dir / f"{i}" / f"output_{step:09}.png")
-                writer.add_image(f"render/{i}", np.array(image), step, dataformats="HWC")
-            imgs = jnp.stack(imgs)
+            for i, (coarse_img, fine_img) in zip(gt_ids, rendered_imgs):
+                image = jax_to_PIL(coarse_img)
+                image.save(render_dir / f"{i}" / f"coarse_output_{step:09}.png")
+                writer.add_image(f"coarse_render/{i}", np.array(image), step, dataformats="HWC")
+                image = jax_to_PIL(fine_img)
+                image.save(render_dir / f"{i}" / f"fine_output_{step:09}.png")
+                writer.add_image(f"fine_render/{i}", np.array(image), step, dataformats="HWC")
+            imgs = jnp.stack([c_i for (c_i, f_i) in rendered_imgs])
             psnr = jnp.mean(jax.vmap(PSNR) (ground_truth_images, imgs))
-            writer.add_scalar("psnr", psnr, step)
+            writer.add_scalar("coarse_psnr", psnr, step)
+            imgs = jnp.stack([f_i for (c_i, f_i) in rendered_imgs])
+            psnr = jnp.mean(jax.vmap(PSNR) (ground_truth_images, imgs))
+            writer.add_scalar("fine_psnr", psnr, step)
 
         if step % conf["checkpoint_every"] == 0 and step > 0:
             serialize(nerfs, ckpt_file, {"step":step})

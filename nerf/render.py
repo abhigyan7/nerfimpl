@@ -96,10 +96,10 @@ def hierarchical_render_single_ray(key, ray, nerfs, train=False):
 @eqx.filter_jit
 def render_line(nerfs, rays, key):
     keys = jax.random.split(key, rays.origin.shape[0])
-    _, fine_rgbs = eqx.filter_vmap(
+    coarse_rgbs, fine_rgbs = eqx.filter_vmap(
         hierarchical_render_single_ray, in_axes=(0, 0, None, None)
     )(keys, rays, nerfs, False)
-    return fine_rgbs
+    return coarse_rgbs, fine_rgbs
 
 
 def render_frame(nerfs, camera, key, n_rays_per_chunk=400):
@@ -115,13 +115,14 @@ def render_frame(nerfs, camera, key, n_rays_per_chunk=400):
 
     rays = jax.tree_map(lambda x: x.reshape((n_chunks, n_rays_per_chunk, 3)), rays)
 
-    fine_rgbs = jax.lax.map(
+    coarse_rgbs, fine_rgbs = jax.lax.map(
         lambda ray_key: render_line(nerfs, ray_key[0], ray_key[1]), (rays, keys)
     )
 
     fine_rgbs = jax.tree_map(lambda x: x.reshape((*rays_orig_shape[:-1], 3)), fine_rgbs)
+    coarse_rgbs = jax.tree_map(lambda x: x.reshape((*rays_orig_shape[:-1], 3)), coarse_rgbs)
 
-    return fine_rgbs
+    return coarse_rgbs, fine_rgbs
 
 
 if __name__ == "__main__":
