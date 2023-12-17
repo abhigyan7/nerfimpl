@@ -7,7 +7,7 @@ from PIL import Image
 import jax.numpy as jnp
 from jaxlie import SE3, SO3
 
-from nerf.datasets.nerfdata import Dataset, normalize_ts, normalize_ts_minmax
+from nerf.datasets.nerfdata import Dataset, normalize_ts
 from nerf.primitives.camera import PinholeCamera
 
 
@@ -55,14 +55,10 @@ class BlenderDataset(Dataset):
         self.rotations_SO3 = jax.vmap(SO3.from_matrix)(self.rotations)
         self.translations = jnp.stack(self.translations, 0)
         print(f"Loading dataset from file {transforms_file}")
-        if t_min is None:
-            self.translations, self.t_min, self.t_max = normalize_ts_minmax(self.translations)
-            print(f"Used {self.t_min=}, {self.t_max=}")
-        else:
-            self.translations = normalize_ts(self.translations, t_min, t_max)
-            self.t_min = t_min
-            self.t_max = t_max
-            print(f"Used {self.t_min=}, {self.t_max=}")
+
+        self.translations, self.t_min, self.t_max = normalize_ts(self.translations, t_min, t_max)
+        print(f"Used {self.t_min=}, {self.t_max=} to normalize poses to [-1,1]^3")
+
         self.poses = jax.vmap(SE3.from_rotation_and_translation)(
             self.rotations_SO3, self.translations
         )

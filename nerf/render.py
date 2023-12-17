@@ -3,6 +3,7 @@
 import jax
 import jax.numpy as jnp
 import equinox as eqx
+from nerf.primitives.camera import inverse_transform
 
 from nerf.primitives.encoding import positional_encoding
 
@@ -23,7 +24,7 @@ def sample_coarse(key, n_points):
 
 def sample_fine(key, n_points, probs, ts):
     uniform_samples = jax.random.uniform(key, (n_points,))
-    probs = probs + jnp.ones_like(probs) * jnp.finfo(jnp.float32).eps
+    probs = probs + jnp.ones_like(probs) * jnp.finfo(jnp.float32).resolution
     p_cdf = jnp.cumsum(probs)
     p_cdf = p_cdf / p_cdf.max()
     return jnp.interp(uniform_samples, p_cdf, ts)
@@ -70,23 +71,27 @@ def render_single_ray(ray, ts, nerf, key, train=False):
     return rgb, nerf_densities, nerf_rgbs
 
 
-def hierarchical_render_single_ray(key, ray, nerfs, train=False):
+def hierarchical_render_single_ray(key, ray, nerfs, sampling="linear", train=False):
     coarse_reg_key, fine_reg_key, key = jax.random.split(key, 3)
     coarse_key, fine_key = jax.random.split(key, 2)
     coarse_ts = sample_coarse(coarse_key, 64)
-    coarse_ts_scaled = 2.0 + 6.0 * coarse_ts
+    if sampling == "inverse":
+        coarse_ts = inverse_transform(coarse_ts)
     coarse_rgb, coarse_densities, _ = render_single_ray(
-        ray, coarse_ts_scaled, nerfs[0], coarse_reg_key, train
+        ray, coarse_ts, nerfs[0], coarse_reg_key, train
     )
 
     coarse_densities = jax.lax.stop_gradient(coarse_densities)
 
     weights = calc_w(coarse_densities, dists(coarse_ts))
 
+    if sampling == "inverse":
+        coarse_ts = inverse_transform(coarse_ts)
     fine_ts = sample_fine(fine_key, 128, weights, coarse_ts)
     fine_ts = jnp.concatenate((coarse_ts, fine_ts))
-    fine_ts = 2.0 + 6.0 * fine_ts
     fine_ts = jnp.sort(fine_ts)
+    if sampling == "inverse":
+        fine_ts = inverse_transform(fine_ts)
 
     fine_rgb, _, _ = render_single_ray(ray, fine_ts, nerfs[1], fine_reg_key, train)
 
@@ -103,7 +108,7 @@ def render_line(nerfs, rays, key):
 
 
 def render_frame(nerfs, camera, key, n_rays_per_chunk=400):
-    rays = camera.get_rays()
+    rays = camera.get_rays_experimental()
     rays_orig_shape = rays.origin.shape
     total_n_rays = rays_orig_shape[0] * rays_orig_shape[1]
     if total_n_rays > n_rays_per_chunk:
@@ -126,10 +131,10 @@ def render_frame(nerfs, camera, key, n_rays_per_chunk=400):
 
 
 if __name__ == "__main__":
-    sample_coarse(jax.random.PRNGKey(0), 16)
+    test_ts = sample_coarse(jax.random.PRNGKey(0), 8)
+    print(f"{sample_coarse(jax.random.PRNGKey(0), 8)=}")
     test_density = jnp.array([0.4, 0.9, 9.5, 0.1, 1.0, 2.0, 4.0, 0.9])
     test_deltas = jnp.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
-    test_ts = jnp.array([0.1, 0.2, 0.4, 0.3, 0.2, 0.1, 0.0, 0.2])
     alphas = calc_alpha(test_density, test_deltas)
     print(f"{alphas=}")
     T = calc_transmittance(alphas)
@@ -139,4 +144,6 @@ if __name__ == "__main__":
     t = jnp.array([0.1, 0.2, 0.5, 0.9, 1.1, 1.8])
     print(f"{dists(t)=}")
     delta = jnp.diff(t)
-    print(sample_fine(jax.random.PRNGKey(0), 10, test_density, test_ts))
+    fine_ts = sample_fine(jax.random.PRNGKey(0), 10, test_density, test_ts)
+    fine_ts = jnp.sort(fine_ts)
+    print(f"{fine_ts=}")
