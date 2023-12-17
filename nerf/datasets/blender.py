@@ -11,7 +11,7 @@ from nerf.datasets.nerfdata import Dataset, normalize_ts
 from nerf.primitives.camera import PinholeCamera
 
 
-def process_transforms_json(frames, scene_path, scale=1.0):
+def process_transforms_json(frames, scene_path, scale=1.0, N=-1):
     images = []
     H = []
     W = []
@@ -33,14 +33,17 @@ def process_transforms_json(frames, scene_path, scale=1.0):
         rotations.append(transform[:3, :3])
         translations.append(transform[:3, 3].squeeze())
 
+        if len(images) == N:
+            break
+
     return images, H, W, f, rotations, translations
 
 
 class BlenderDataset(Dataset):
-    def __init__(self, scene_path, transforms_file, scale=1.0, t_min=None, t_max=None):
+    def __init__(self, scene_path, transforms_file, scale=1.0, t_min=None, t_max=None, N=-1):
         with open(scene_path / transforms_file) as f:
             frames = json.load(f)
-            outputs = process_transforms_json(frames, scene_path, scale)
+            outputs = process_transforms_json(frames, scene_path, scale, N)
             (
                 self.images,
                 self.H,

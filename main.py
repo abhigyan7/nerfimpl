@@ -95,10 +95,11 @@ def train(**conf):
         conf["dataset_path"], 
         "transforms_test.json", 
         conf["scale"], 
-        nerfdataset.t_min, nerfdataset.t_max)
+        nerfdataset.t_min, nerfdataset.t_max,
+        N=30)
     dataloader = Dataloader(dataloader_key, nerfdataset, conf["batch_size"])
 
-    gt_ids = jnp.array([0, 23, 50, 75, 90, 110, 130, 150], dtype=jnp.int32)
+    gt_ids = jnp.array([0, 5, 10, 15, 20, 25, 29], dtype=jnp.int32)
     ground_truth_images = jax.vmap(lambda i: nerfdataset_test.images[i]) (gt_ids)
 
     cameras = []
