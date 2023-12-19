@@ -59,8 +59,8 @@ class BlenderDataset(Dataset):
         self.translations = jnp.stack(self.translations, 0)
         print(f"Loading dataset from file {transforms_file}")
 
-        self.translations, self.t_min, self.t_max = normalize_ts(self.translations, t_min, t_max)
-        print(f"Used {self.t_min=}, {self.t_max=} to normalize poses to [-1,1]^3")
+        # self.translations, self.t_min, self.t_max = normalize_ts(self.translations, t_min, t_max)
+        # print(f"Used {self.t_min=}, {self.t_max=} to normalize poses to [-1,1]^3")
 
         self.poses = jax.vmap(SE3.from_rotation_and_translation)(
             self.rotations_SO3, self.translations
@@ -69,7 +69,7 @@ class BlenderDataset(Dataset):
         self.W = np.array(self.W)
         self.f = np.array(self.f)
 
-        self.cameras = jax.vmap(lambda x, h, w, f: PinholeCamera(f, h, w, x, 0.01, 3))(
+        self.cameras = jax.vmap(lambda x, h, w, f: PinholeCamera(f, h, w, x, 2.0, 6.0))(
             self.poses, self.H, self.W, self.f
         )
 

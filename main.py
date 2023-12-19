@@ -21,13 +21,13 @@ from nerf.utils import timing, serialize, deserialize, jax_to_PIL, PSNR
 
 
 @eqx.filter_jit
-def optimize_one_batch(nerfs, rays, rgb_ground_truths, key, optimizer, optimizer_state):
+def optimize_one_batch(nerfs, rays, rgb_ground_truths, key, optimizer, optimizer_state, loc_encoding_scale=1.0):
     @eqx.filter_value_and_grad
     def loss_fn(nerfs, rays, rgb_ground_truths, key):
         keys = jax.random.split(key, rays.origin.shape[0])
         coarse_rgbs, fine_rgbs = eqx.filter_vmap(
-            hierarchical_render_single_ray, in_axes=(0, 0, None, None)
-        )(keys, rays, nerfs, True)
+            hierarchical_render_single_ray, in_axes=(0, 0, None, None, None)
+        )(keys, rays, nerfs, True, loc_encoding_scale)
         loss = jnp.mean((fine_rgbs - rgb_ground_truths) ** 2.0) + jnp.mean(
             (coarse_rgbs - rgb_ground_truths) ** 2.0
         )
@@ -100,6 +100,11 @@ def train(**conf):
     nerfdataset_test = nerfdataset
     dataloader = Dataloader(dataloader_key, nerfdataset, conf["batch_size"])
 
+    t_min = min(nerfdataset.t_min)
+    t_max = min(nerfdataset.t_max)
+
+    loc_encoding_scale = (t_max - t_min) * 1.2
+
     gt_ids = jnp.array([0, 15, 20, 29], dtype=jnp.int32)
     ground_truth_images = jax.vmap(lambda i: nerfdataset_test.images[i]) (gt_ids)
 
@@ -125,12 +130,12 @@ def train(**conf):
         key, sampler_key = jax.random.split(key)
 
         nerfs, optimizer_state, loss = optimize_one_batch(
-            nerfs, rays, rgb_ground_truths, sampler_key, optimizer, optimizer_state
+            nerfs, rays, rgb_ground_truths, sampler_key, optimizer, optimizer_state, loc_encoding_scale,
         )
 
         if step % conf["render_every"] == 0 or (step+1) == conf["num_steps"]:
             rendered_imgs = list(map(
-                lambda c: render_frame(nerfs, c, key, conf["chunk_size"]),
+                lambda c: render_frame(nerfs, c, key, conf["chunk_size"], loc_encoding_scale),
                 tqdm(cameras, desc="Rendering test images: ", leave=False)
             ))
             for i, (coarse_img, fine_img) in zip(gt_ids, rendered_imgs):
