@@ -95,15 +95,13 @@ def train(**conf):
         conf["dataset_path"], 
         "transforms_test.json", 
         conf["scale"], 
-        nerfdataset.t_min, nerfdataset.t_max,
         N=30)
-    nerfdataset_test = nerfdataset
     dataloader = Dataloader(dataloader_key, nerfdataset, conf["batch_size"])
 
-    t_min = min(nerfdataset.t_min)
-    t_max = min(nerfdataset.t_max)
-
+    t_min = nerfdataset.translations.min()
+    t_max = nerfdataset.translations.max()
     loc_encoding_scale = (t_max - t_min) * 1.2
+    loc_encoding_scale = loc_encoding_scale.item()
 
     gt_ids = jnp.array([0, 15, 20, 29], dtype=jnp.int32)
     ground_truth_images = jax.vmap(lambda i: nerfdataset_test.images[i]) (gt_ids)

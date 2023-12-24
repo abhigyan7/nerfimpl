@@ -27,9 +27,6 @@ class Dataloader:
         self.W = dataset.W
         self.H = dataset.H
 
-        self.t_min = self.dataset.min()
-        self.t_max = self.dataset.max()
-
     def __len__(self):
         return len(self.dataset)
 

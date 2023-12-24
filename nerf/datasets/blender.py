@@ -40,7 +40,7 @@ def process_transforms_json(frames, scene_path, scale=1.0, N=-1):
 
 
 class BlenderDataset(Dataset):
-    def __init__(self, scene_path, transforms_file, scale=1.0, t_min=None, t_max=None, N=-1):
+    def __init__(self, scene_path, transforms_file, scale=1.0, N=-1):
         with open(scene_path / transforms_file) as f:
             frames = json.load(f)
             outputs = process_transforms_json(frames, scene_path, scale, N)
@@ -58,9 +58,6 @@ class BlenderDataset(Dataset):
         self.rotations_SO3 = jax.vmap(SO3.from_matrix)(self.rotations)
         self.translations = jnp.stack(self.translations, 0)
         print(f"Loading dataset from file {transforms_file}")
-
-        # self.translations, self.t_min, self.t_max = normalize_ts(self.translations, t_min, t_max)
-        # print(f"Used {self.t_min=}, {self.t_max=} to normalize poses to [-1,1]^3")
 
         self.poses = jax.vmap(SE3.from_rotation_and_translation)(
             self.rotations_SO3, self.translations
