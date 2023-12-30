@@ -21,13 +21,20 @@ from nerf.utils import timing, serialize, deserialize, jax_to_PIL, PSNR
 
 
 @eqx.filter_jit
-def optimize_one_batch(nerfs, rays, rgb_ground_truths, key, optimizer, optimizer_state, loc_encoding_scale=1.0):
+def optimize_one_batch(
+    nerfs, 
+    rays, 
+    rgb_ground_truths, 
+    key, 
+    optimizer, optimizer_state, 
+    renderer_settings,
+    ):
     @eqx.filter_value_and_grad
     def loss_fn(nerfs, rays, rgb_ground_truths, key):
         keys = jax.random.split(key, rays.origin.shape[0])
         coarse_rgbs, fine_rgbs = eqx.filter_vmap(
             hierarchical_render_single_ray, in_axes=(0, 0, None, None, None)
-        )(keys, rays, nerfs, True, loc_encoding_scale)
+        )(keys, rays, nerfs, True, renderer_settings)
         loss = jnp.mean((fine_rgbs - rgb_ground_truths) ** 2.0) + jnp.mean(
             (coarse_rgbs - rgb_ground_truths) ** 2.0
         )
@@ -50,6 +57,9 @@ def optimize_one_batch(nerfs, rays, rgb_ground_truths, key, optimizer, optimizer
 @click.option('--num-steps', type=int, default=1e7)
 @click.option('--render-every', type=int, default=200)
 @click.option('--checkpoint-every', type=int, default=5000)
+@click.option('--t-sampling', type=str, default="linear")
+@click.option('--num-fine-samples', type=int, default=64)
+@click.option('--num-coarse-samples', type=int, default=128)
 @click.option('--resume-from', type=Path)
 @click.option('--runs-dir', type=Path, default=Path("runs"))
 @timing
@@ -79,6 +89,7 @@ def train(**conf):
     optimizer = optax.adam(lr_sched)
     optimizer_state = optimizer.init(eqx.filter(nerfs, eqx.is_array))
 
+
     if conf["resume_from"] is not None:
         assert ckpt_file.exists(), "NeRF checkpoint not found"
         nerfs, train_state = deserialize(
@@ -102,6 +113,13 @@ def train(**conf):
     t_max = nerfdataset.translations.max()
     loc_encoding_scale = (t_max - t_min) * 1.2
     loc_encoding_scale = loc_encoding_scale.item()
+
+    renderer_settings = {
+        "loc_encoding_scale":loc_encoding_scale,
+        "t_sampling": conf["t_sampling"],
+        "num_coarse_samples": conf["num_coarse_samples"],
+        "num_fine_samples": conf["num_fine_samples"],
+    }
 
     gt_ids = jnp.array([0, 15, 20, 29], dtype=jnp.int32)
     ground_truth_images = jax.vmap(lambda i: nerfdataset_test.images[i]) (gt_ids)
@@ -128,12 +146,12 @@ def train(**conf):
         key, sampler_key = jax.random.split(key)
 
         nerfs, optimizer_state, loss = optimize_one_batch(
-            nerfs, rays, rgb_ground_truths, sampler_key, optimizer, optimizer_state, loc_encoding_scale,
+            nerfs, rays, rgb_ground_truths, sampler_key, optimizer, optimizer_state, renderer_settings,
         )
 
         if step % conf["render_every"] == 0 or (step+1) == conf["num_steps"]:
             rendered_imgs = list(map(
-                lambda c: render_frame(nerfs, c, key, conf["chunk_size"], loc_encoding_scale),
+                lambda c: render_frame(nerfs, c, key, conf["chunk_size"], renderer_settings),
                 tqdm(cameras, desc="Rendering test images: ", leave=False)
             ))
             for i, (coarse_img, fine_img) in zip(gt_ids, rendered_imgs):
