@@ -27,7 +27,7 @@ def process_transforms_json(frames, scene_path, scale=1.0, N=-1):
         images.append(image)
         H.append(image.shape[0])
         W.append(image.shape[1])
-        f.append(image.shape[1] / (np.tan(train_fov / 2.0)))
+        f.append(0.5 * image.shape[1] / (np.tan(train_fov / 2.0)))
 
         transform = np.array(frame["transform_matrix"])
         rotations.append(transform[:3, :3])
