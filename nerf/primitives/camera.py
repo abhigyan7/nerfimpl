@@ -6,6 +6,7 @@ from jaxlie import SE3, SO3
 import jax.numpy as jnp
 from jaxtyping import Float, Array
 
+
 def inverse_transform(t):
     return t / (1.0 - t)
 
@@ -51,7 +52,7 @@ class PinholeCamera(eqx.Module):
         d = self.pose.rotation() @ d
         o = self.pose.translation() + o
 
-        tn = -(self.near+o[2]) / d[2]
+        tn = -(self.near + o[2]) / d[2]
         o = o + tn * d
 
         # o_prime = jnp.array([

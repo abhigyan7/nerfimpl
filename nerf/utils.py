@@ -27,7 +27,7 @@ def serialize(parameters, checkpoint_filepath, metadata=None):
     """# Dump metadata as json to a file and append model parameters. #########"""
     with open(checkpoint_filepath, "wb") as f:
         if metadata is not None:
-            metadata= json.dumps(metadata)
+            metadata = json.dumps(metadata)
             f.write((metadata + "\n").encode())
         eqx.tree_serialise_leaves(f, parameters)
 
@@ -48,7 +48,7 @@ def timing(f):
         ts = time()
         result = f(*args, **kw)
         te = time()
-        print('func:%r args:[%r, %r] took: %2.4f sec' % \
-          (f.__name__, args, kw, te-ts))
+        print("func:%r args:[%r, %r] took: %2.4f sec" % (f.__name__, args, kw, te - ts))
         return result
+
     return wrap

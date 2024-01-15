@@ -78,25 +78,35 @@ def hierarchical_render_single_ray(key, ray, nerfs, train, renderer_settings):
     if renderer_settings["t_sampling"] == "inverse":
         coarse_ts = inverse_transform(coarse_ts)
     coarse_rgb, coarse_densities, _ = render_single_ray(
-        ray, coarse_ts, nerfs[0], 
-        coarse_reg_key, train, 
-        renderer_settings["loc_encoding_scale"])
+        ray,
+        coarse_ts,
+        nerfs[0],
+        coarse_reg_key,
+        train,
+        renderer_settings["loc_encoding_scale"],
+    )
     coarse_densities = jax.lax.stop_gradient(coarse_densities)
 
     weights = calc_w(coarse_densities, dists(coarse_ts))
 
     if renderer_settings["t_sampling"] == "inverse":
         coarse_ts = inverse_transform(coarse_ts)
-    fine_ts = sample_fine(fine_key, renderer_settings["num_fine_samples"], weights, coarse_ts)
+    fine_ts = sample_fine(
+        fine_key, renderer_settings["num_fine_samples"], weights, coarse_ts
+    )
     fine_ts = jnp.concatenate((coarse_ts, fine_ts))
     fine_ts = jnp.sort(fine_ts)
     if renderer_settings["t_sampling"] == "inverse":
         fine_ts = inverse_transform(fine_ts)
 
     fine_rgb, _, _ = render_single_ray(
-        ray, fine_ts, nerfs[1], 
-        fine_reg_key, train, 
-        renderer_settings["loc_encoding_scale"])
+        ray,
+        fine_ts,
+        nerfs[1],
+        fine_reg_key,
+        train,
+        renderer_settings["loc_encoding_scale"],
+    )
 
     return coarse_rgb, fine_rgb
 
@@ -124,11 +134,14 @@ def render_frame(nerfs, camera, key, n_rays_per_chunk, renderer_settings):
     rays = jax.tree_map(lambda x: x.reshape((n_chunks, n_rays_per_chunk, 3)), rays)
 
     coarse_rgbs, fine_rgbs = jax.lax.map(
-        lambda ray_key: render_line(nerfs, ray_key[0], ray_key[1], renderer_settings), (rays, keys)
+        lambda ray_key: render_line(nerfs, ray_key[0], ray_key[1], renderer_settings),
+        (rays, keys),
     )
 
     fine_rgbs = jax.tree_map(lambda x: x.reshape((*rays_orig_shape[:-1], 3)), fine_rgbs)
-    coarse_rgbs = jax.tree_map(lambda x: x.reshape((*rays_orig_shape[:-1], 3)), coarse_rgbs)
+    coarse_rgbs = jax.tree_map(
+        lambda x: x.reshape((*rays_orig_shape[:-1], 3)), coarse_rgbs
+    )
 
     return coarse_rgbs, fine_rgbs
 

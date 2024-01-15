@@ -58,6 +58,6 @@ def normalize_ts(ts, min=None, max=None):
     if min is None:
         min = ts.min()
         max = ts.max()
-    ts = (ts - min) / (max - min) # 0 to 1
-    ts = ts * 2.0 - 1.0 # -1 to 1
+    ts = (ts - min) / (max - min)  # 0 to 1
+    ts = ts * 2.0 - 1.0  # -1 to 1
     return ts, min, max
