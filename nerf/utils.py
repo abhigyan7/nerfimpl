@@ -34,13 +34,12 @@ def serialize(parameters, checkpoint_filepath, metadata=None):
 
 def deserialize(parameters, checkpoint_filepath, has_metadata=True):
     """# Load metadata and model parameters."""
+    metadata = {}
     with open(checkpoint_filepath, "rb") as f:
         if has_metadata:
             metadata = json.loads(f.readline().decode())
         parameters = eqx.tree_deserialise_leaves(f, parameters)
-    if has_metadata:
-        return parameters, metadata
-    return parameters
+    return parameters, metadata
 
 
 def timing(f):
