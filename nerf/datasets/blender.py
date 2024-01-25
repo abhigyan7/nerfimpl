@@ -7,7 +7,7 @@ from PIL import Image
 import jax.numpy as jnp
 from jaxlie import SE3, SO3
 
-from nerf.datasets.nerfdata import Dataset, normalize_ts
+from nerf.datasets.nerfdata import Dataset
 from nerf.primitives.camera import PinholeCamera
 
 

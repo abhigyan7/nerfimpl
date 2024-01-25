@@ -70,11 +70,26 @@ class PinholeCamera(eqx.Module):
         return Ray(o, d)
 
     def get_ray_exp(self, u, v):
-        ray = self.get_ray(u, v)
+        o = jnp.array([0.0, 0.0, 0.0])
+        d = jnp.array(
+            [
+                (u + 0.5 - self.w / 2.0)
+                / self.f,  # TODO make sure that +0.5 is correct
+                -(v + 0.5 - self.h / 2.0) / self.f,
+                -1.0,
+            ]
+        )
+
+        tn = -(self.near + o[2]) / d[2]
+        o = o + tn * d
+
         distance = jnp.abs(self.near - self.far)
-        direction = ray.direction / jnp.linalg.norm(ray.direction)
-        direction = direction * distance
-        return Ray(ray.origin, direction)
+        d = distance * d / jnp.abs(d[2])
+
+        d = self.pose.rotation() @ d
+        o = self.pose @ o
+
+        return Ray(o, d)
 
     def get_rays(self):
         us = jnp.arange(self.w)
