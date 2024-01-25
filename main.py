@@ -194,7 +194,7 @@ def train(**conf):
     nerfdataset_test = BlenderDataset(
         conf["dataset_path"], "transforms_test.json", conf["scale"], N=30
     )
-    nerfdataset_test = nerfdataset
+
     dataloader = Dataloader(dataloader_key, nerfdataset, conf["batch_size"])
 
     t_min = nerfdataset.translations.min()

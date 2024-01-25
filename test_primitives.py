@@ -75,7 +75,7 @@ def test(**conf):
     xs = xyzs[:, 0]
     ys = xyzs[:, 1]
     zs = xyzs[:, 2]
-    ax.scatter(xs, ys, zs, c="r")
+    # ax.scatter(xs, ys, zs, c="r")
 
     xs = camera_centers[:, 0]
     ys = camera_centers[:, 1]
