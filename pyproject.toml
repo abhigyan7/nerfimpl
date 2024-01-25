@@ -1,7 +1,7 @@
 [tool.pyright]
 exclude = [ ".venv" ]
-venvPath = "."
-venv = ".venv"
+venvPath = "/media/data/venvs"
+venv = "cudajax"
 
 pythonVersion = "3.10"
 pythonPlatform = "Linux"
