@@ -54,8 +54,9 @@ def test(**conf):
     camera_centers = nerfdataset.cameras.pose.translation()
 
     first_camera = jax.tree_map(lambda x: x[0], nerfdataset.cameras)
-    # rays = first_camera.get_rays_experimental()
+    rays = first_camera.get_rays_experimental()
     _, rays = dataloader.get_batch()
+    rays = jax.tree_map(lambda x: x.reshape(-1, 3), rays)
     keys = jax.random.split(loc_key, rays.origin.shape[0])
 
     def get_samples_for_ray(ray, key):
@@ -63,11 +64,10 @@ def test(**conf):
         if conf["t_sampling"] == "inverse":
             ts = inverse_transform(ts)
         xyzs = eqx.filter_vmap(ray)(ts)
-        return xyzs[-1]
+        return xyzs
 
     xyzs = jax.vmap(get_samples_for_ray)(rays, keys)
     xyzs = xyzs.reshape(-1, 3)
-    rays = jax.tree_map(lambda x: x.reshape(-1, 3), rays)
 
     fig = plt.figure(figsize=(12, 7))
     ax = fig.add_subplot(projection="3d")
@@ -75,7 +75,7 @@ def test(**conf):
     xs = xyzs[:, 0]
     ys = xyzs[:, 1]
     zs = xyzs[:, 2]
-    ax.scatter(xs, ys, zs)
+    ax.scatter(xs, ys, zs, c="r")
 
     xs = camera_centers[:, 0]
     ys = camera_centers[:, 1]
@@ -85,12 +85,12 @@ def test(**conf):
     xs = rays.origin[:, 0]
     ys = rays.origin[:, 1]
     zs = rays.origin[:, 2]
-    # ax.scatter(xs, ys, zs, c=np.arange(xs.shape[0]))
+    ax.scatter(xs, ys, zs)
 
     xs = xs + rays.direction[:, 0]
     ys = ys + rays.direction[:, 1]
     zs = zs + rays.direction[:, 2]
-    # ax.scatter(xs, ys, zs, c=np.arange(xs.shape[0]))
+    ax.scatter(xs, ys, zs, c=np.arange(xs.shape[0]))
 
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
@@ -116,8 +116,6 @@ def test(**conf):
 
     print(xyzs.shape)
     print("Test done!")
-    breakpoint()
-
     return
 
 
