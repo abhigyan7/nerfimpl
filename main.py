@@ -17,7 +17,7 @@ from nerf.primitives.mlp import MhallMLP
 from nerf.datasets.nerfdata import Dataloader
 from nerf.datasets.blender import BlenderDataset
 from nerf.render import render_frame, hierarchical_render_single_ray
-from nerf.utils import timing, serialize, deserialize, jax_to_PIL, PSNR
+from nerf.utils import timing, serialize, deserialize, jax_to_PIL, PSNR, mse_to_psnr
 
 
 @eqx.filter_jit
@@ -31,7 +31,7 @@ def optimize_one_batch(
     renderer_settings,
 ):
     @eqx.filter_value_and_grad
-    def loss_fn(nerfs, rays, rgb_ground_truths, key):
+    def loss_fn(nerfs, rays, rgb_ground_truths, key, renderer_settings):
         keys = jax.random.split(key, rays.origin.shape[0])
         coarse_rgbs, fine_rgbs = eqx.filter_vmap(
             hierarchical_render_single_ray, in_axes=(0, 0, None, None, None)
@@ -41,7 +41,7 @@ def optimize_one_batch(
         )
         return loss
 
-    loss, grad = loss_fn(nerfs, rays, rgb_ground_truths, key)
+    loss, grad = loss_fn(nerfs, rays, rgb_ground_truths, key, renderer_settings)
     updates, optimizer_state = optimizer.update(grad, optimizer_state)
     nerfs = eqx.apply_updates(nerfs, updates)
 
@@ -284,6 +284,7 @@ def train(**conf):
 
         pbar.set_description(f"Loss={loss.item():.4f}, utils.PSNR={psnr:.4f}")
         writer.add_scalar("loss", loss.item(), step)
+        writer.add_scalar("psnr", mse_to_psnr(loss.item() / 2.0), step)
         writer.add_scalar(
             "learning rate", lr_sched(optimizer_state[1].count.item()), step
         )
