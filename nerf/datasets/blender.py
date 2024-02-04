@@ -66,9 +66,9 @@ class BlenderDataset(Dataset):
         self.W = np.array(self.W)
         self.f = np.array(self.f)
 
-        self.cameras = jax.vmap(lambda x, h, w, f: PinholeCamera(f, h, w, x, 2.0, 6.0))(
-            self.poses, self.H, self.W, self.f
-        )
+        self.cameras = jax.vmap(
+            lambda f, h, w, pose: PinholeCamera(f, h, w, pose, 2.0, 6.0, (w / 2, h / 2))
+        )(self.f, self.H, self.W, self.f)
 
     def __getitem__(self, i):
         return self.images[i], self.poses[i]

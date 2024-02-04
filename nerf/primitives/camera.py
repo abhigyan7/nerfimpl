@@ -28,7 +28,7 @@ class PinholeCamera(eqx.Module):
     far: Float
     pose: SE3
 
-    def __init__(self, f, h, w, pose, near=2.0, far=6.0, c=(0.0, 0.0)):
+    def __init__(self, f, h, w, pose, c, near=1.0, far=2.0):
         self.f = f
         self.h = h
         self.w = w
@@ -37,45 +37,12 @@ class PinholeCamera(eqx.Module):
         self.far = far
         self.c = c
 
-    @jax.jit
-    def get_ray(self, u: Float, v: Float) -> Ray:
-        # should return centers and directions for the specified pixel
+    def get_ray(self, u, v):
         o = jnp.array([0.0, 0.0, 0.0])
         d = jnp.array(
             [
-                (u - 0.5 - self.w / 2.0) / self.f,
-                -(v - 0.5 - self.h / 2.0) / self.f,
-                -1.0,
-            ]
-        )
-
-        d = self.pose.rotation() @ d
-        o = self.pose.translation() + o
-
-        tn = -(self.near + o[2]) / d[2]
-        o = o + tn * d
-
-        # o_prime = jnp.array([
-        #     -(self.f * o[0])/((self.w/2)*o[2]),
-        #     -(self.f * o[1])/((self.h/2)*o[2]),
-        #     1.0+(2.0*self.near)/(o[2]),
-        # ])
-
-        # d_prime = jnp.array([
-        #     - (self.f / (self.w/2)) * ((d[0]/d[2]) - (o[0]/o[2])),
-        #     - (self.f / (self.h/2)) * ((d[1]/d[2]) - (o[1]/o[2])),
-        #     - (2.0*self.near)/(o[2]),
-        # ])
-
-        return Ray(o, d)
-
-    def get_ray_exp(self, u, v):
-        o = jnp.array([0.0, 0.0, 0.0])
-        d = jnp.array(
-            [
-                (u + 0.5 - self.w / 2.0)
-                / self.f,  # TODO make sure that +0.5 is correct
-                -(v + 0.5 - self.h / 2.0) / self.f,
+                (u - 0.5 - c[0]) / self.f,
+                -(v - 0.5 - c[1]) / self.f,
                 -1.0,
             ]
         )
@@ -92,15 +59,6 @@ class PinholeCamera(eqx.Module):
         return Ray(o, d)
 
     def get_rays(self):
-        us = jnp.arange(self.w)
-        vs = jnp.arange(self.h)
-        us, vs = jnp.meshgrid(us, vs)
-        mapped = eqx.filter_vmap(
-            eqx.filter_vmap(self.get_ray, in_axes=(0, 0)), in_axes=(0, 0)
-        )
-        return mapped(us, vs)
-
-    def get_rays_experimental(self):
         us = jnp.arange(self.w)
         vs = jnp.arange(self.h)
         us, vs = jnp.meshgrid(us, vs)
@@ -123,7 +81,7 @@ if __name__ == "__main__":
     print(f"{ray.direction=}")
     print(f"{ray(0.0)=}")
     print(f"{ray(1.0)=}")
-    ray = c.get_ray_exp(50, 50)
+    ray = c.get_ray(50, 50)
     print(f"{ray.origin=}")
     print(f"{ray.direction=}")
     print(f"{ray(0.0)=}")

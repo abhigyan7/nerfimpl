@@ -54,7 +54,7 @@ def test(**conf):
     camera_centers = nerfdataset.cameras.pose.translation()
 
     first_camera = jax.tree_map(lambda x: x[0], nerfdataset.cameras)
-    rays = first_camera.get_rays_experimental()
+    rays = first_camera.get_rays()
     _, rays = dataloader.get_batch()
     rays = jax.tree_map(lambda x: x.reshape(-1, 3), rays)
     keys = jax.random.split(loc_key, rays.origin.shape[0])

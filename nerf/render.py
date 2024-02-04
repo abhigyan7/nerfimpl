@@ -121,7 +121,7 @@ def render_line(nerfs, rays, key, renderer_settings):
 
 
 def render_frame(nerfs, camera, key, n_rays_per_chunk, renderer_settings):
-    rays = camera.get_rays_experimental()
+    rays = camera.get_rays()
     rays_orig_shape = rays.origin.shape
     total_n_rays = rays_orig_shape[0] * rays_orig_shape[1]
     if total_n_rays > n_rays_per_chunk:
