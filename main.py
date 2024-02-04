@@ -56,7 +56,68 @@ def cli():
 @cli.command()
 @click.option("--dataset-path", type=Path, required=True)
 @click.option("--seed", type=int, default=42)
-def evaluate():
+@click.option("--chunk-size", type=int, default=400)
+@click.option("--scale", type=float, default=1.0)
+@click.option("--t-sampling", type=str, default="linear")
+@click.option("--num-fine-samples", type=int, default=64)
+@click.option("--num-coarse-samples", type=int, default=128)
+@click.option("--output-dir", type=Path, default=Path("runs"))
+@click.option("--nerf-weights", type=Path, required=True)
+def evaluate(**conf):
+    key = jax.random.PRNGKey(conf["seed"])
+    coarse_nerf_key, fine_nerf_key, sampler_key = jax.random.split(key, 3)
+    output_dir = conf["output_dir"] / datetime.now().strftime("%b%d_%H-%M-%S")
+    os.makedirs(output_dir, exist_ok=True)
+
+    coarse_nerf = MhallMLP(coarse_nerf_key)
+    fine_nerf = MhallMLP(fine_nerf_key)
+    nerfs = [coarse_nerf, fine_nerf]
+    nerfs, metadata = deserialize(nerfs, conf["nerf_weights"])
+    loc_encoding_scale = metadata["loc_encoding_scale"]
+    print(f"Loaded checkpoints from {conf['nerf_weights']}.")
+
+    nerfdataset_test = BlenderDataset(
+        conf["dataset_path"], "transforms_test.json", conf["scale"]
+    )
+
+    renderer_settings = {
+        "loc_encoding_scale": loc_encoding_scale,
+        "t_sampling": conf["t_sampling"],
+        "num_coarse_samples": conf["num_coarse_samples"],
+        "num_fine_samples": conf["num_fine_samples"],
+    }
+
+    ground_truth_images = nerfdataset_test.images
+
+    cameras = nerfdataset_test.cameras
+
+    rendered_imgs = list(
+        map(
+            lambda c: render_frame(
+                nerfs, c, sampler_key, conf["chunk_size"], renderer_settings
+            ),
+            tqdm(cameras, desc="Rendering test images: ", leave=False),
+        )
+    )
+
+    psnrs = []
+
+    for i, ground_truth_image, (coarse_img, fine_img) in enumerate(
+        zip(ground_truth_images, rendered_imgs)
+    ):
+        image = jax_to_PIL(ground_truth_image)
+        image.save(output_dir / f"gt_{i}.png")
+        image = jax_to_PIL(coarse_img)
+        image.save(output_dir / f"coarse_{i}.png")
+        image = jax_to_PIL(fine_img)
+        image.save(output_dir / f"fine_{i}.png")
+
+        psnr = PSNR(ground_truth_image, fine_img)
+        print(f"Image {i:03}, psnr={psnr:.02}")
+        psnrs.append(psnr)
+
+    print(f"{np.mean(psnrs)=}")
+    print("Evaluation done!")
     return
 
 

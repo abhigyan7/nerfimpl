@@ -50,7 +50,7 @@ class Dataloader:
             in_axes=[None, 0, 0, 0],
         )(self.dataset.images, batch_idx, us, vs)
         cameras = jax.tree_map(lambda x: x[batch_idx], self.dataset.cameras)
-        rays = jax.vmap(lambda x, u, v: x.get_ray_exp(u, v))(cameras, us, vs)
+        rays = jax.vmap(lambda x, u, v: x.get_ray(u, v))(cameras, us, vs)
         return rgb_ground_truths, rays
 
 

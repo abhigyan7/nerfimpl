@@ -40,8 +40,8 @@ class PinholeCamera(eqx.Module):
         o = jnp.array([0.0, 0.0, 0.0])
         d = jnp.array(
             [
-                (u - 0.5 - c[0]) / self.f,
-                -(v - 0.5 - c[1]) / self.f,
+                (u - 0.5 - self.c[0]) / self.f,
+                -(v - 0.5 - self.c[1]) / self.f,
                 -1.0,
             ]
         )
@@ -62,7 +62,7 @@ class PinholeCamera(eqx.Module):
         vs = jnp.arange(self.h)
         us, vs = jnp.meshgrid(us, vs)
         mapped = eqx.filter_vmap(
-            eqx.filter_vmap(self.get_ray_exp, in_axes=(0, 0)), in_axes=(0, 0)
+            eqx.filter_vmap(self.get_ray, in_axes=(0, 0)), in_axes=(0, 0)
         )
         return mapped(us, vs)
 

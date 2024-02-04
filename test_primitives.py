@@ -38,7 +38,7 @@ def test(**conf):
         conf["dataset_path"], "transforms_train.json", conf["scale"], 64
     )
 
-    batch_size = 256
+    batch_size = 64
     dataloader = Dataloader(dl_key, nerfdataset, batch_size)
 
     camera_centers = nerfdataset.cameras.pose.translation()
@@ -65,7 +65,7 @@ def test(**conf):
     xs = xyzs[:, 0]
     ys = xyzs[:, 1]
     zs = xyzs[:, 2]
-    # ax.scatter(xs, ys, zs, c="r")
+    ax.scatter(xs, ys, zs, c="r")
 
     xs = camera_centers[:, 0]
     ys = camera_centers[:, 1]
@@ -75,7 +75,7 @@ def test(**conf):
     xs = rays.origin[:, 0]
     ys = rays.origin[:, 1]
     zs = rays.origin[:, 2]
-    ax.scatter(xs, ys, zs)
+    # ax.scatter(xs, ys, zs)
 
     xs = xs + rays.direction[:, 0]
     ys = ys + rays.direction[:, 1]
