@@ -4,7 +4,6 @@ import jax
 import jaxtyping
 import equinox as eqx
 from jax.nn import relu
-from jax.nn import leaky_relu as relu
 import jax.numpy as jnp
 from equinox.nn import Linear
 

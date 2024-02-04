@@ -1,30 +1,20 @@
 #!/usr/bin/env python3
 
-import os
 import click
 import numpy as np
 from pathlib import Path
-from tqdm import tqdm, trange
-from datetime import datetime
 
 import jax
-import optax
 import equinox as eqx
-import jax.numpy as jnp
-from tensorboardX import SummaryWriter
 import matplotlib.pyplot as plt
 
-from nerf.primitives.mlp import MhallMLP
 from nerf.datasets.nerfdata import Dataloader
 from nerf.datasets.blender import BlenderDataset
 from nerf.render import (
-    render_frame,
-    hierarchical_render_single_ray,
     sample_coarse,
-    sample_fine,
     inverse_transform,
 )
-from nerf.utils import timing, serialize, deserialize, jax_to_PIL, PSNR, mse_to_psnr
+from nerf.utils import timing
 
 
 @click.group()
@@ -104,9 +94,9 @@ def test(**conf):
     ys = rays.origin[:, 1]
     zs = rays.origin[:, 2]
 
-    xd = rays.direction[:, 0]
-    yd = rays.direction[:, 1]
-    zd = rays.direction[:, 2]
+    # xd = rays.direction[:, 0]
+    # yd = rays.direction[:, 1]
+    # zd = rays.direction[:, 2]
 
     print(f"{rays.origin.shape=}")
 

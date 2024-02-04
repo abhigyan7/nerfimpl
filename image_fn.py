@@ -73,7 +73,7 @@ def main():
 
     img = np.uint8(np.array(ground_truth_image) * 255.0)
     image = Image.fromarray(img)
-    image.save(f"runs/gt.png")
+    image.save("runs/gt.png")
 
     jax_img = jnp.array(np.float32(img)) / 255.0
 

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import jax
 import equinox as eqx
 from jaxlie import SE3, SO3
 import jax.numpy as jnp
