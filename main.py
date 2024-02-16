@@ -63,10 +63,13 @@ def cli():
 @click.option("--num-coarse-samples", type=int, default=128)
 @click.option("--output-dir", type=Path, default=Path("runs"))
 @click.option("--nerf-weights", type=Path, required=True)
+@timing
 def evaluate(**conf):
     key = jax.random.PRNGKey(conf["seed"])
     coarse_nerf_key, fine_nerf_key, sampler_key = jax.random.split(key, 3)
-    output_dir = conf["output_dir"] / datetime.now().strftime("%b%d_%H-%M-%S")
+    output_dir = conf["output_dir"] / "evaluate_" + datetime.now().strftime(
+        "%b%d_%H-%M-%S"
+    )
     os.makedirs(output_dir, exist_ok=True)
 
     coarse_nerf = MhallMLP(coarse_nerf_key)
@@ -88,23 +91,16 @@ def evaluate(**conf):
     }
 
     ground_truth_images = nerfdataset_test.images
-
     cameras = nerfdataset_test.cameras
-
-    rendered_imgs = list(
-        map(
-            lambda c: render_frame(
-                nerfs, c, sampler_key, conf["chunk_size"], renderer_settings
-            ),
-            tqdm(cameras, desc="Rendering test images: ", leave=False),
-        )
-    )
-
     psnrs = []
 
-    for i, ground_truth_image, (coarse_img, fine_img) in enumerate(
-        zip(ground_truth_images, rendered_imgs)
-    ):
+    for i in range(ground_truth_images.shape[0]):
+        camera = jax.tree_map(lambda x: x[i], cameras)
+        ground_truth_image = jax.tree_map(lambda x: x[i], ground_truth_images)
+        coarse_img, fine_img = render_frame(
+            nerfs, camera, sampler_key, conf["chunk_size"], renderer_settings
+        )
+
         image = jax_to_PIL(ground_truth_image)
         image.save(output_dir / f"gt_{i}.png")
         image = jax_to_PIL(coarse_img)
