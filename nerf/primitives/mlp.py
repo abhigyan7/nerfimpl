@@ -7,6 +7,8 @@ from jax.nn import relu
 import jax.numpy as jnp
 from equinox.nn import Linear
 
+from nerf.primitives.encoding import PositionalEncoding
+
 
 class ImageFuncMLP(eqx.Module):
     layers: jax.Array
@@ -39,9 +41,10 @@ class ImageFuncMLP(eqx.Module):
 class BasicNeRF(eqx.Module):
     layers: jax.Array
 
-    def __init__(self, key: jaxtyping.PRNGKeyArray, pos_dim=60):
+    def __init__(self, key: jaxtyping.PRNGKeyArray, encoding_scale, pos_dim=60):
         keys = jax.random.split(key, 5)
         self.layers: jax.Array = [
+            PositionalEncoding(pos_dim, encoding_scale),
             Linear(pos_dim, 256, key=keys[0]),
             relu,
             Linear(256, 256, key=keys[1]),
@@ -69,9 +72,16 @@ class MhallMLP(eqx.Module):
     layers_second_half: jax.Array
     rgb_head: jax.Array
 
-    def __init__(self, key: jaxtyping.PRNGKeyArray, pos_dim=60, dir_dim=24):
+    def __init__(
+        self,
+        key: jaxtyping.PRNGKeyArray,
+        pos_dim=60,
+        dir_dim=24,
+        pos_encoding_scale=1.0,
+    ):
         keys = jax.random.split(key, 10)
         self.layers_first_half: jax.Array = [
+            PositionalEncoding(pos_dim, pos_encoding_scale),
             Linear(pos_dim, 256, key=keys[0]),
             relu,
             Linear(256, 256, key=keys[1]),

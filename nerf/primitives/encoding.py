@@ -1,7 +1,21 @@
 #!/usr/bin/env python3
 
+import equinox as eqx
 import jax.numpy as jnp
 import jax
+
+
+class PositionalEncoding(eqx.Module):
+    L: float
+    scale: float
+
+    def __call__(self, p):
+        p = p / self.scale
+        theta = jnp.outer(p, jnp.pi * (2.0 ** jnp.arange(self.L)))
+        sines = jnp.sin(theta)
+        cosines = jnp.cos(theta)
+        periodic_fns = jnp.concatenate([sines.reshape(-1), cosines.reshape(-1)])
+        return periodic_fns
 
 
 def positional_encoding(p, L, scale=1.0):
