@@ -13,10 +13,11 @@ from nerf.primitives.encoding import PositionalEncoding
 class ImageFuncMLP(eqx.Module):
     layers: jax.Array
 
-    def __init__(self, key: jaxtyping.PRNGKeyArray, pos_dim=40):
+    def __init__(self, key: jaxtyping.PRNGKeyArray, pos_dim=10, scale=128.0):
         keys = jax.random.split(key, 7)
         self.layers: jax.Array = [
-            Linear(pos_dim, 256, key=keys[0]),
+            PositionalEncoding(pos_dim, scale),
+            Linear(pos_dim * 2 * 2, 256, key=keys[0]),
             relu,
             Linear(256, 256, key=keys[1]),
             relu,
@@ -71,18 +72,22 @@ class MhallMLP(eqx.Module):
     layers_first_half: jax.Array
     layers_second_half: jax.Array
     rgb_head: jax.Array
+    loc_encoding_layer: eqx.Module
+    dir_encoding_layer: eqx.Module
 
     def __init__(
         self,
         key: jaxtyping.PRNGKeyArray,
-        pos_dim=60,
-        dir_dim=24,
+        pos_dim=10,
+        dir_dim=4,
         pos_encoding_scale=1.0,
     ):
         keys = jax.random.split(key, 10)
+
+        self.loc_encoding_layer = PositionalEncoding(pos_dim, pos_encoding_scale)
+        self.dir_encoding_layer = PositionalEncoding(dir_dim)
         self.layers_first_half: jax.Array = [
-            PositionalEncoding(pos_dim, pos_encoding_scale),
-            Linear(pos_dim, 256, key=keys[0]),
+            Linear(pos_dim * 3 * 2, 256, key=keys[0]),
             relu,
             Linear(256, 256, key=keys[1]),
             relu,
@@ -93,7 +98,7 @@ class MhallMLP(eqx.Module):
         ]
 
         self.layers_second_half = [
-            Linear(256 + pos_dim, 256, key=keys[4]),
+            Linear(256 + pos_dim * 3 * 2, 256, key=keys[4]),
             relu,
             Linear(256, 256, key=keys[5]),
             relu,
@@ -105,27 +110,26 @@ class MhallMLP(eqx.Module):
         ]
 
         self.rgb_head = [
-            Linear(256 + dir_dim, 128, key=keys[9]),
+            Linear(256 + dir_dim * 3 * 2, 128, key=keys[9]),
             relu,
             Linear(128, 3, key=keys[10]),
         ]
 
     def __call__(self, xyz: jax.Array, view_dir: jax.Array) -> jax.Array:
-        x = xyz
+        xyz = self.loc_encoding_layer(xyz)
+        view_dir = self.dir_encoding_layer(view_dir)
 
+        x = xyz
         for layer in self.layers_first_half:
             x = layer(x)
 
         x = jnp.concatenate([x, xyz])
-
         for layer in self.layers_second_half:
             x = layer(x)
 
         density = x[0]
-
         x = x[1:]
         x = jnp.concatenate([x, view_dir])
-
         for layer in self.rgb_head:
             x = layer(x)
         rgb = x

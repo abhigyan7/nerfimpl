@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 from nerf.primitives import mlp
-from nerf.primitives.encoding import positional_encoding
 from nerf.datasets.blender import BlenderDataset
 import jax.numpy as jnp
 from PIL import Image
@@ -30,10 +29,7 @@ def visualize_encoding(encodings, savedir="runs/encoding"):
 
 @eqx.filter_jit
 def render_image(nerf, pixel_locs):
-    locations = jax.vmap(jax.vmap(lambda x: positional_encoding(x, 10, scale=128.0)))(
-        pixel_locs
-    )
-    rgbs = eqx.filter_vmap(eqx.filter_vmap(nerf))(locations)
+    rgbs = eqx.filter_vmap(eqx.filter_vmap(nerf))(pixel_locs)
     return rgbs
 
 
@@ -41,10 +37,7 @@ def render_image(nerf, pixel_locs):
 def optimize_one_batch(nerf, pixel_locs, rgb_ground_truths, optimizer, optimizer_state):
     @eqx.filter_value_and_grad
     def loss_fn(nerf, pixel_locs, rgb_ground_truths):
-        locations = jax.vmap(lambda x: positional_encoding(x, 10, scale=128.0))(
-            pixel_locs
-        )
-        rgbs = eqx.filter_vmap(nerf)(locations)
+        rgbs = eqx.filter_vmap(nerf)(pixel_locs)
         loss = jnp.mean((rgbs - rgb_ground_truths) ** 2.0)
         return loss
 

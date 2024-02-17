@@ -72,19 +72,17 @@ def evaluate(**conf):
     )
     os.makedirs(output_dir, exist_ok=True)
 
-    coarse_nerf = MhallMLP(coarse_nerf_key)
-    fine_nerf = MhallMLP(fine_nerf_key)
-    nerfs = [coarse_nerf, fine_nerf]
-    nerfs, metadata = deserialize(nerfs, conf["nerf_weights"])
-    loc_encoding_scale = metadata["loc_encoding_scale"]
-    print(f"Loaded checkpoints from {conf['nerf_weights']}.")
-
     nerfdataset_test = BlenderDataset(
         conf["dataset_path"], "transforms_test.json", conf["scale"]
     )
 
+    coarse_nerf = MhallMLP(coarse_nerf_key)
+    fine_nerf = MhallMLP(fine_nerf_key)
+    nerfs = [coarse_nerf, fine_nerf]
+    nerfs, _ = deserialize(nerfs, conf["nerf_weights"])
+    print(f"Loaded checkpoints from {conf['nerf_weights']}.")
+
     renderer_settings = {
-        "loc_encoding_scale": loc_encoding_scale,
         "t_sampling": conf["t_sampling"],
         "num_coarse_samples": conf["num_coarse_samples"],
         "num_fine_samples": conf["num_fine_samples"],
@@ -146,8 +144,7 @@ def render(**conf):
     coarse_nerf = MhallMLP(coarse_nerf_key)
     fine_nerf = MhallMLP(fine_nerf_key)
     nerfs = [coarse_nerf, fine_nerf]
-    nerfs, metadata = deserialize(nerfs, conf["nerf_weights"])
-    loc_encoding_scale = metadata["loc_encoding_scale"]
+    nerfs, _ = deserialize(nerfs, conf["nerf_weights"])
     print(f"Loaded checkpoints from {conf['nerf_weights']}.")
 
     nerfdataset_test = BlenderDataset(
@@ -155,7 +152,6 @@ def render(**conf):
     )
 
     renderer_settings = {
-        "loc_encoding_scale": loc_encoding_scale,
         "t_sampling": conf["t_sampling"],
         "num_coarse_samples": conf["num_coarse_samples"],
         "num_fine_samples": conf["num_fine_samples"],
@@ -230,28 +226,6 @@ def train(**conf):
     os.makedirs(ckpt_dir, exist_ok=True)
     os.makedirs(render_dir, exist_ok=True)
 
-    coarse_nerf = MhallMLP(coarse_nerf_key)
-    fine_nerf = MhallMLP(fine_nerf_key)
-    nerfs = [coarse_nerf, fine_nerf]
-    start_step = 0
-    lr_sched = optax.cosine_decay_schedule(conf["lr"], conf["num_steps"])
-    optimizer = optax.adam(lr_sched)
-    optimizer_state = optimizer.init(eqx.filter(nerfs, eqx.is_array))
-
-    loc_encoding_scale = -1.0
-
-    if conf["resume_from"] is not None:
-        assert ckpt_file.exists(), "NeRF checkpoint not found"
-        nerfs, train_state = deserialize(nerfs, ckpt_file)
-        start_step = train_state["step"]
-        loc_encoding_scale = train_state["loc_encoding_scale"]
-        print(f"Loaded checkpoints from {ckpt_file}.")
-        optimizer_state, _ = deserialize(
-            optimizer_state, optstate_file, has_metadata=False
-        )
-        print(f"Loaded optimizer state from {optstate_file}.")
-        print(f"Resuming training from step {start_step}.")
-
     nerfdataset = BlenderDataset(
         conf["dataset_path"], "transforms_train.json", conf["scale"]
     )
@@ -259,16 +233,33 @@ def train(**conf):
         conf["dataset_path"], "transforms_test.json", conf["scale"], N=30
     )
 
-    dataloader = Dataloader(dataloader_key, nerfdataset, conf["batch_size"])
-
     t_min = nerfdataset.translations.min()
     t_max = nerfdataset.translations.max()
-    if loc_encoding_scale < 0.0:
-        loc_encoding_scale = (t_max - t_min) * 1.2
-        loc_encoding_scale = loc_encoding_scale.item()
+    loc_encoding_scale = (t_max - t_min) * 1.2
+    loc_encoding_scale = loc_encoding_scale.item()
+
+    coarse_nerf = MhallMLP(coarse_nerf_key, pos_encoding_scale=loc_encoding_scale)
+    fine_nerf = MhallMLP(fine_nerf_key, pos_encoding_scale=loc_encoding_scale)
+    nerfs = [coarse_nerf, fine_nerf]
+    start_step = 0
+    lr_sched = optax.cosine_decay_schedule(conf["lr"], conf["num_steps"])
+    optimizer = optax.adam(lr_sched)
+    optimizer_state = optimizer.init(eqx.filter(nerfs, eqx.is_array))
+
+    if conf["resume_from"] is not None:
+        assert ckpt_file.exists(), "NeRF checkpoint not found"
+        nerfs, train_state = deserialize(nerfs, ckpt_file)
+        start_step = train_state["step"]
+        print(f"Loaded checkpoints from {ckpt_file}.")
+        optimizer_state, _ = deserialize(
+            optimizer_state, optstate_file, has_metadata=False
+        )
+        print(f"Loaded optimizer state from {optstate_file}.")
+        print(f"Resuming training from step {start_step}.")
+
+    dataloader = Dataloader(dataloader_key, nerfdataset, conf["batch_size"])
 
     renderer_settings = {
-        "loc_encoding_scale": loc_encoding_scale,
         "t_sampling": conf["t_sampling"],
         "num_coarse_samples": conf["num_coarse_samples"],
         "num_fine_samples": conf["num_fine_samples"],
@@ -342,7 +333,7 @@ def train(**conf):
             serialize(
                 nerfs,
                 ckpt_file,
-                {"step": step, "loc_encoding_scale": loc_encoding_scale},
+                {"step": step},
             )
             serialize(optimizer_state, optstate_file, metadata=None)
 

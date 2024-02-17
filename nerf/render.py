@@ -5,8 +5,6 @@ import jax.numpy as jnp
 import equinox as eqx
 from nerf.primitives.camera import inverse_transform
 
-from nerf.primitives.encoding import positional_encoding
-
 
 def cart2sph(xyz):
     xy = xyz[0] ** 2 + xyz[1] ** 2
@@ -53,11 +51,9 @@ def dists(ts):
     return jnp.diff(ts, append=1e10)
 
 
-def render_single_ray(ray, ts, nerf, key, train=False, loc_encoding_scale=1.0):
-    xyzs = eqx.filter_vmap(ray)(ts)
-    locations = jax.vmap(lambda x: positional_encoding(x, 10, loc_encoding_scale))(xyzs)
+def render_single_ray(ray, ts, nerf, key, train=False):
+    locations = eqx.filter_vmap(ray)(ts)
     direction = ray.direction / jnp.linalg.norm(ray.direction)
-    direction = positional_encoding(direction, 4)
     nerf_densities, nerf_rgbs = eqx.filter_vmap(nerf, in_axes=(0, None))(
         locations, direction
     )
@@ -83,7 +79,6 @@ def hierarchical_render_single_ray(key, ray, nerfs, train, renderer_settings):
         nerfs[0],
         coarse_reg_key,
         train,
-        renderer_settings["loc_encoding_scale"],
     )
     coarse_densities = jax.lax.stop_gradient(coarse_densities)
 
@@ -105,7 +100,6 @@ def hierarchical_render_single_ray(key, ray, nerfs, train, renderer_settings):
         nerfs[1],
         fine_reg_key,
         train,
-        renderer_settings["loc_encoding_scale"],
     )
 
     return coarse_rgb, fine_rgb
