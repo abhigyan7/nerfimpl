@@ -67,8 +67,8 @@ def cli():
 def evaluate(**conf):
     key = jax.random.PRNGKey(conf["seed"])
     coarse_nerf_key, fine_nerf_key, sampler_key = jax.random.split(key, 3)
-    output_dir = conf["output_dir"] / "evaluate_" + datetime.now().strftime(
-        "%b%d_%H-%M-%S"
+    output_dir = conf["output_dir"] / (
+        "evaluate_" + datetime.now().strftime("%b%d_%H-%M-%S")
     )
     os.makedirs(output_dir, exist_ok=True)
 
@@ -94,7 +94,11 @@ def evaluate(**conf):
     cameras = nerfdataset_test.cameras
     psnrs = []
 
-    for i in range(ground_truth_images.shape[0]):
+    pbar = trange(ground_truth_images.shape[0])
+    output_file = open(output_dir / "psnr.txt", "w")
+    output_file.write("image, psnr\n")
+
+    for i in pbar:
         camera = jax.tree_map(lambda x: x[i], cameras)
         ground_truth_image = jax.tree_map(lambda x: x[i], ground_truth_images)
         coarse_img, fine_img = render_frame(
@@ -102,15 +106,18 @@ def evaluate(**conf):
         )
 
         image = jax_to_PIL(ground_truth_image)
-        image.save(output_dir / f"gt_{i}.png")
+        image.save(output_dir / f"gt_{i:04d}.png")
         image = jax_to_PIL(coarse_img)
-        image.save(output_dir / f"coarse_{i}.png")
+        image.save(output_dir / f"coarse_{i:04d}.png")
         image = jax_to_PIL(fine_img)
-        image.save(output_dir / f"fine_{i}.png")
+        image.save(output_dir / f"fine_{i:04d}.png")
 
         psnr = PSNR(ground_truth_image, fine_img)
-        print(f"Image {i:03}, psnr={psnr:.02}")
+        pbar.set_description(f"psnr={psnr:.04}")
         psnrs.append(psnr)
+        output_file.write(f"{i:04d}, {psnr:.08}\n")
+
+    output_file.close()
 
     print(f"{np.mean(psnrs)=}")
     print("Evaluation done!")
