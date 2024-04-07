@@ -64,7 +64,7 @@ def render_single_ray(ray, ts, nerf, key, train=False):
     deltas = dists(ts)
     w = calc_w(nerf_densities, deltas)
     rgb = jnp.dot(w, nerf_rgbs)
-    return rgb, nerf_densities, nerf_rgbs
+    return rgb, nerf_densities, nerf_rgbs, w
 
 
 def hierarchical_render_single_ray(key, ray, nerfs, train, renderer_settings):
@@ -73,7 +73,7 @@ def hierarchical_render_single_ray(key, ray, nerfs, train, renderer_settings):
     coarse_ts = sample_coarse(coarse_key, renderer_settings["num_coarse_samples"])
     if renderer_settings["t_sampling"] == "inverse":
         coarse_ts = inverse_transform(coarse_ts)
-    coarse_rgb, coarse_densities, _ = render_single_ray(
+    coarse_rgb, coarse_densities, _, _ = render_single_ray(
         ray,
         coarse_ts,
         nerfs[0],
@@ -94,7 +94,7 @@ def hierarchical_render_single_ray(key, ray, nerfs, train, renderer_settings):
     if renderer_settings["t_sampling"] == "inverse":
         fine_ts = inverse_transform(fine_ts)
 
-    fine_rgb, _, _ = render_single_ray(
+    fine_rgb, _, _, fine_weights = render_single_ray(
         ray,
         fine_ts,
         nerfs[1],
@@ -102,16 +102,16 @@ def hierarchical_render_single_ray(key, ray, nerfs, train, renderer_settings):
         train,
     )
 
-    return coarse_rgb, fine_rgb
+    return coarse_rgb, fine_rgb, fine_weights.dot(fine_ts)
 
 
 @eqx.filter_jit
 def render_line(nerfs, rays, key, renderer_settings):
     keys = jax.random.split(key, rays.origin.shape[0])
-    coarse_rgbs, fine_rgbs = eqx.filter_vmap(
+    coarse_rgbs, fine_rgbs, depth_map = eqx.filter_vmap(
         hierarchical_render_single_ray, in_axes=(0, 0, None, None, None)
     )(keys, rays, nerfs, False, renderer_settings)
-    return coarse_rgbs, fine_rgbs
+    return coarse_rgbs, fine_rgbs, depth_map
 
 
 def render_frame(nerfs, camera, key, n_rays_per_chunk, renderer_settings):
@@ -127,7 +127,7 @@ def render_frame(nerfs, camera, key, n_rays_per_chunk, renderer_settings):
 
     rays = jax.tree_map(lambda x: x.reshape((n_chunks, n_rays_per_chunk, 3)), rays)
 
-    coarse_rgbs, fine_rgbs = jax.lax.map(
+    coarse_rgbs, fine_rgbs, depth_map = jax.lax.map(
         lambda ray_key: render_line(nerfs, ray_key[0], ray_key[1], renderer_settings),
         (rays, keys),
     )
@@ -136,8 +136,9 @@ def render_frame(nerfs, camera, key, n_rays_per_chunk, renderer_settings):
     coarse_rgbs = jax.tree_map(
         lambda x: x.reshape((*rays_orig_shape[:-1], 3)), coarse_rgbs
     )
+    depth_map = jax.tree_map(lambda x: x.reshape(rays_orig_shape[:-1]), depth_map)
 
-    return coarse_rgbs, fine_rgbs
+    return coarse_rgbs, fine_rgbs, depth_map
 
 
 if __name__ == "__main__":

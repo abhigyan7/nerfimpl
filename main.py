@@ -33,7 +33,7 @@ def optimize_one_batch(
     @eqx.filter_value_and_grad
     def loss_fn(nerfs, rays, rgb_ground_truths, key, renderer_settings):
         keys = jax.random.split(key, rays.origin.shape[0])
-        coarse_rgbs, fine_rgbs = eqx.filter_vmap(
+        coarse_rgbs, fine_rgbs, _ = eqx.filter_vmap(
             hierarchical_render_single_ray, in_axes=(0, 0, None, None, None)
         )(keys, rays, nerfs, True, renderer_settings)
         loss = jnp.mean((fine_rgbs - rgb_ground_truths) ** 2.0) + jnp.mean(
@@ -99,7 +99,7 @@ def evaluate(**conf):
     for i in pbar:
         camera = jax.tree_map(lambda x: x[i], cameras)
         ground_truth_image = jax.tree_map(lambda x: x[i], ground_truth_images)
-        coarse_img, fine_img = render_frame(
+        coarse_img, fine_img, depth_map = render_frame(
             nerfs, camera, sampler_key, conf["chunk_size"], renderer_settings
         )
 
@@ -109,6 +109,8 @@ def evaluate(**conf):
         image.save(output_dir / f"coarse_{i:04d}.png")
         image = jax_to_PIL(fine_img)
         image.save(output_dir / f"fine_{i:04d}.png")
+        image = jax_to_PIL(depth_map)
+        image.save(output_dir / f"depth_{i:04d}.png")
 
         psnr = PSNR(ground_truth_image, fine_img)
         pbar.set_description(f"psnr={psnr:.04}")
@@ -178,7 +180,7 @@ def render(**conf):
         )
     )
 
-    for i, ground_truth_image, (coarse_img, fine_img) in zip(
+    for i, ground_truth_image, (coarse_img, fine_img, depth_map) in zip(
         gt_ids, ground_truth_images, rendered_imgs
     ):
         image = jax_to_PIL(ground_truth_image)
@@ -187,6 +189,8 @@ def render(**conf):
         image.save(output_dir / f"coarse_{i}.png")
         image = jax_to_PIL(fine_img)
         image.save(output_dir / f"fine_{i}.png")
+        image = jax_to_PIL(depth_map)
+        image.save(output_dir / f"depth_{i}.png")
     print("Render done!")
 
     return
@@ -311,21 +315,28 @@ def train(**conf):
                     tqdm(cameras, desc="Rendering test images: ", leave=False),
                 )
             )
-            for i, (coarse_img, fine_img) in zip(gt_ids, rendered_imgs):
+            for i, (coarse_img, fine_img, depth_img) in zip(gt_ids, rendered_imgs):
                 image = jax_to_PIL(coarse_img)
                 image.save(render_dir / f"{i}" / f"coarse_output_{step:09}.png")
                 writer.add_image(
                     f"coarse_render/{i}", np.array(image), step, dataformats="HWC"
                 )
+
                 image = jax_to_PIL(fine_img)
                 image.save(render_dir / f"{i}" / f"fine_output_{step:09}.png")
                 writer.add_image(
                     f"fine_render/{i}", np.array(image), step, dataformats="HWC"
                 )
-            imgs = jnp.stack([c_i for (c_i, _) in rendered_imgs])
+
+                image = jax_to_PIL(depth_img)
+                image.save(render_dir / f"{i}" / f"depth_output_{step:09}.png")
+                writer.add_image(
+                    f"depth_render/{i}", np.array(image), step, dataformats="HW"
+                )
+            imgs = jnp.stack([c_i for (c_i, _, _) in rendered_imgs])
             psnr = jnp.mean(jax.vmap(PSNR)(ground_truth_images, imgs))
             writer.add_scalar("coarse_psnr", psnr, step)
-            imgs = jnp.stack([f_i for (_, f_i) in rendered_imgs])
+            imgs = jnp.stack([f_i for (_, f_i, _) in rendered_imgs])
             psnr = jnp.mean(jax.vmap(PSNR)(ground_truth_images, imgs))
             writer.add_scalar("fine_psnr", psnr, step)
 
